@@ -1,0 +1,8 @@
+runtime: nodejs24
+
+automatic_scaling:
+  max_instances: 2
+  max_idle_instances: 2
+  target_cpu_utilization: 0.92
+  target_throughput_utilization: 0.92
+  max_concurrent_requests: 800
