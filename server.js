@@ -1,6 +1,7 @@
 import express from 'express';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadModerators } from './server/datastore/moderators.js';
 import chatRouter from './server/routes/chat.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -16,6 +17,14 @@ app.get('*', (_req, res) => {
   res.sendFile(path.join(distDir, 'index.html'));
 });
 
-app.listen(PORT, () => {
-  console.log(`Listening on :${PORT}`);
+async function start() {
+  await loadModerators();
+  app.listen(PORT, () => {
+    console.log(`Listening on :${PORT}`);
+  });
+}
+
+start().catch((err) => {
+  console.error('Failed to start server:', err);
+  process.exit(1);
 });

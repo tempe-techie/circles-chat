@@ -7,6 +7,17 @@ export type MessagesPage = {
   hasMore: boolean;
 };
 
+export async function fetchModerators(): Promise<string[]> {
+  const res = await fetch('/api/chat/moderators');
+  const data = (await res.json()) as { moderators?: string[]; error?: string };
+
+  if (!res.ok) {
+    throw new Error(data.error ?? 'Failed to load moderators');
+  }
+
+  return data.moderators ?? [];
+}
+
 export async function fetchMessages(
   limit: number,
   cursor?: string,

@@ -7,7 +7,8 @@ import {
   listMessages,
   saveMessage,
 } from '../datastore/messages.js';
-import { verifyAuthorSignature } from '../utils/chain.js';
+import { getModeratorAddresses, isModerator } from '../datastore/moderators.js';
+import { recoverSignerAddress } from '../utils/chain.js';
 
 const router = Router();
 
@@ -17,6 +18,10 @@ const MAX_LIMIT = 50;
 function deleteSignPayload(messageKey) {
   return `circles-chat:delete:${messageKey}`;
 }
+
+router.get('/moderators', (_req, res) => {
+  return res.json({ moderators: getModeratorAddresses() });
+});
 
 router.get('/messages', async (req, res) => {
   try {
@@ -111,10 +116,19 @@ router.delete('/messages/:key', async (req, res) => {
 
     const author = getAddress(message.author);
     const signPayload = deleteSignPayload(key);
-    const valid = await verifyAuthorSignature(author, signPayload, signature);
 
-    if (!valid) {
+    let signer;
+    try {
+      signer = getAddress(await recoverSignerAddress(signPayload, signature));
+    } catch {
       return res.status(403).json({ error: 'Invalid signature' });
+    }
+
+    const isAuthor = signer === author;
+    const isMod = isModerator(signer);
+
+    if (!isAuthor && !isMod) {
+      return res.status(403).json({ error: 'Not authorized to delete this message' });
     }
 
     await deleteMessage(key);

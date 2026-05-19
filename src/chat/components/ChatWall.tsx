@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAddress } from 'viem';
 import { deleteMainMessage, postMainMessage } from '../actions';
-import { fetchMessages } from '../api';
+import { fetchMessages, fetchModerators } from '../api';
 import { PAGE_SIZE } from '../constants';
 import { enrichMessages } from '../enrich';
 import type { ChatMessage } from '../types';
@@ -17,6 +17,9 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [moderatorAddresses, setModeratorAddresses] = useState<Set<string>>(
+    () => new Set(),
+  );
 
   const listRef = useRef<HTMLDivElement>(null);
   const skipScrollToBottomRef = useRef(false);
@@ -62,12 +65,18 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
       setLoading(true);
       setError(null);
       try {
-        const page = await fetchMessages(PAGE_SIZE);
+        const [page, moderators] = await Promise.all([
+          fetchMessages(PAGE_SIZE),
+          fetchModerators(),
+        ]);
         if (cancelled) return;
         const enriched = await enrichMessages(page.messages);
         nextCursorRef.current = page.nextCursor;
         setMessages(enriched);
         setHasMore(page.hasMore);
+        setModeratorAddresses(
+          new Set(moderators.map((a) => getAddress(a))),
+        );
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -111,7 +120,9 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   const canDeleteMessage = (msg: ChatMessage) => {
     if (!wallet) return false;
     try {
-      return getAddress(msg.author) === getAddress(wallet);
+      const me = getAddress(wallet);
+      if (getAddress(msg.author) === me) return true;
+      return moderatorAddresses.has(me);
     } catch {
       return false;
     }
