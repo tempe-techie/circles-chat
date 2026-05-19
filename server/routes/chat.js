@@ -13,7 +13,7 @@ import {
   listReactionsForMessages,
   saveReaction,
 } from '../datastore/reactions.js';
-import { recoverSignerAddress } from '../utils/chain.js';
+import { recoverSignerAddress, verifyAuthorSignature } from '../utils/chain.js';
 import {
   buildReactionTransfer,
   createReactionPaymentData,
@@ -154,15 +154,27 @@ router.delete('/messages/:key', async (req, res) => {
     const author = getAddress(message.author);
     const signPayload = deleteSignPayload(key);
 
-    let signer;
+    let signer = null;
     try {
       signer = getAddress(await recoverSignerAddress(signPayload, signature));
     } catch {
-      return res.status(403).json({ error: 'Invalid signature' });
+      // ERC-1271 smart-account signatures cannot be recovered to an EOA address.
     }
 
-    const isAuthor = signer === author;
-    const isMod = isModerator(signer);
+    let isAuthor = signer === author;
+    if (!isAuthor) {
+      isAuthor = await verifyAuthorSignature(author, signPayload, signature);
+    }
+
+    let isMod = signer !== null && isModerator(signer);
+    if (!isMod) {
+      for (const modAddr of getModeratorAddresses()) {
+        if (await verifyAuthorSignature(modAddr, signPayload, signature)) {
+          isMod = true;
+          break;
+        }
+      }
+    }
 
     if (!isAuthor && !isMod) {
       return res.status(403).json({ error: 'Not authorized to delete this message' });
