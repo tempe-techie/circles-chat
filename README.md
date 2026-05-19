@@ -11,7 +11,14 @@ Chat app for Circles users.
 
 ```bash
 npm install
-npm run dev
+cp .env.example .env   # add MYLOCALHOST=1 and arweaveKey JSON for posting
+```
+
+Run the API server and Vite dev server (two terminals):
+
+```bash
+npm run dev:api   # http://localhost:8080 — Arweave upload + /api/chat
+npm run dev       # http://localhost:5173 — proxies /api to :8080
 ```
 
 Open the dev server URL (typically `http://localhost:5173`).

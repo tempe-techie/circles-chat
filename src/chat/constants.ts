@@ -1,0 +1,11 @@
+export const CHAT_CONTRACT_ADDRESS =
+  '0x7058413D002B36486465FF8628bBcCE080e6Af87' as const;
+
+export const MOD_NFT_ADDRESS =
+  '0x498e0e6B245898c5E2dD0299d0456a8928F58ECC' as const;
+
+export const GNOSIS_CHAIN_ID = 100;
+
+export const PAGE_SIZE = 10;
+
+export const MAX_MESSAGE_LENGTH = 4000;
