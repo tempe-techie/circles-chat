@@ -11,13 +11,14 @@ Chat app for Circles users.
 
 ```bash
 npm install
-cp .env.example .env   # add MYLOCALHOST=1 and arweaveKey JSON for posting
+cp .env.example .env   # sets MYLOCALHOST=1 for local API env vars
+gcloud auth application-default login   # Datastore access for project circles-chat-22
 ```
 
 Run the API server and Vite dev server (two terminals):
 
 ```bash
-npm run dev:api   # http://localhost:8080 — Arweave upload + /api/chat
+npm run dev:api   # http://localhost:8080 — Datastore-backed /api/chat
 npm run dev       # http://localhost:5173 — proxies /api to :8080
 ```
 

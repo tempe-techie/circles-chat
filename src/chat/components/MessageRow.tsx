@@ -6,39 +6,29 @@ import { MessageAvatar } from './MessageAvatar';
 export function displayNameFor(message: ChatMessage): string {
   if (message.profile?.name) return message.profile.name;
   try {
-    return shortenAddress(getAddress(message.chain.author));
+    return shortenAddress(getAddress(message.author));
   } catch {
-    return shortenAddress(message.chain.author);
+    return shortenAddress(message.author);
   }
 }
 
 export function MessageRow({
   message,
-  timestamp,
   canDelete,
   deleting,
   onDelete,
-  compact = false,
 }: {
   message: ChatMessage;
-  timestamp: number;
   canDelete?: boolean;
   deleting?: boolean;
   onDelete?: () => void;
-  compact?: boolean;
 }) {
-  const author = message.body?.author ?? message.chain.author;
-  const text =
-    message.loadError ??
-    message.body?.text ??
-    '(message unavailable)';
-
   return (
-    <div className={`flex gap-3 ${compact ? 'py-2' : 'py-3'}`}>
+    <div className="flex gap-3 py-3">
       <MessageAvatar
         profile={message.profile}
-        address={author}
-        size={compact ? 'sm' : 'md'}
+        address={message.author}
+        size="md"
       />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -46,7 +36,7 @@ export function MessageRow({
             {displayNameFor(message)}
           </span>
           <span className="text-xs text-slate-500">
-            {formatRelativeTime(timestamp)}
+            {formatRelativeTime(message.timestamp)}
           </span>
           {canDelete && onDelete && (
             <button
@@ -59,12 +49,8 @@ export function MessageRow({
             </button>
           )}
         </div>
-        <p
-          className={`mt-1 text-sm whitespace-pre-wrap break-words ${
-            message.loadError ? 'text-slate-500 italic' : 'text-slate-200'
-          }`}
-        >
-          {text}
+        <p className="mt-1 text-sm whitespace-pre-wrap break-words text-slate-200">
+          {message.text}
         </p>
       </div>
     </div>

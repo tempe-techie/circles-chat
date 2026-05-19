@@ -1,55 +1,49 @@
 import { useCallback, useEffect, useState } from 'react';
 import { getAddress } from 'viem';
-import {
-  deleteMainMessage,
-  postMainMessage,
-} from '../actions';
-import {
-  checkIsUserMod,
-  fetchLastMainMessages,
-  getMainMessageCount,
-} from '../client';
+import { deleteMainMessage, postMainMessage } from '../actions';
+import { fetchMessages } from '../api';
 import { PAGE_SIZE } from '../constants';
-import { enrichChainMessages } from '../enrich';
+import { enrichMessages } from '../enrich';
 import type { ChatMessage } from '../types';
 import { isMiniappMode } from '../../host/bridge';
 import { MessageComposer } from './MessageComposer';
 import { MessageRow } from './MessageRow';
-import { ReplyThread } from './ReplyThread';
 
 export function ChatWall({ wallet }: { wallet: string | null }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [loadedCount, setLoadedCount] = useState(PAGE_SIZE);
-  const [totalCount, setTotalCount] = useState<bigint>(0n);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
-  const [isMod, setIsMod] = useState(false);
-  const [deletingIndex, setDeletingIndex] = useState<bigint | null>(null);
+  const [deletingKey, setDeletingKey] = useState<string | null>(null);
 
   const inHost = isMiniappMode();
   const canPost = Boolean(wallet && inHost);
 
-  const loadMessages = useCallback(async (count: number) => {
-    const [chainMsgs, total] = await Promise.all([
-      fetchLastMainMessages(count),
-      getMainMessageCount(),
-    ]);
-    const enriched = await enrichChainMessages(chainMsgs);
-    setMessages(enriched);
-    setTotalCount(total);
-    setLoadedCount(count);
-  }, []);
+  const loadMessages = useCallback(
+    async (limit: number, beforeKey?: string, append = false) => {
+      const stored = await fetchMessages(limit, beforeKey);
+      const enriched = await enrichMessages(stored);
+      setHasMore(stored.length === limit);
+      if (append && beforeKey) {
+        setMessages((prev) => [...enriched, ...prev]);
+      } else {
+        setMessages(enriched);
+      }
+    },
+    [],
+  );
 
   const refresh = useCallback(async () => {
     setError(null);
     try {
-      await loadMessages(loadedCount);
+      const count = Math.max(messages.length, PAGE_SIZE);
+      await loadMessages(count);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load chat');
     }
-  }, [loadMessages, loadedCount]);
+  }, [loadMessages, messages.length]);
 
   useEffect(() => {
     let cancelled = false;
@@ -57,15 +51,11 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
       setLoading(true);
       setError(null);
       try {
-        const [chainMsgs, total] = await Promise.all([
-          fetchLastMainMessages(PAGE_SIZE),
-          getMainMessageCount(),
-        ]);
+        const stored = await fetchMessages(PAGE_SIZE);
         if (cancelled) return;
-        const enriched = await enrichChainMessages(chainMsgs);
+        const enriched = await enrichMessages(stored);
         setMessages(enriched);
-        setTotalCount(total);
-        setLoadedCount(PAGE_SIZE);
+        setHasMore(stored.length === PAGE_SIZE);
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -81,30 +71,15 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     };
   }, []);
 
-  useEffect(() => {
-    if (!wallet) {
-      setIsMod(false);
-      return;
-    }
-    let cancelled = false;
-    checkIsUserMod(getAddress(wallet))
-      .then((mod) => {
-        if (!cancelled) setIsMod(mod);
-      })
-      .catch(() => {
-        if (!cancelled) setIsMod(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [wallet]);
-
   const loadMore = async () => {
-    const next = loadedCount + PAGE_SIZE;
+    if (messages.length === 0) return;
+    const oldestKey = messages[0]?.key;
+    if (!oldestKey) return;
+
     setLoadingMore(true);
     setError(null);
     try {
-      await loadMessages(next);
+      await loadMessages(PAGE_SIZE, oldestKey, true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load more');
     } finally {
@@ -115,12 +90,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   const canDeleteMessage = (msg: ChatMessage) => {
     if (!wallet) return false;
     try {
-      const w = getAddress(wallet);
-      return (
-        isMod ||
-        getAddress(msg.chain.author) === w ||
-        Boolean(msg.body?.author && getAddress(msg.body.author) === w)
-      );
+      return getAddress(msg.author) === getAddress(wallet);
     } catch {
       return false;
     }
@@ -132,9 +102,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     setError(null);
     try {
       await postMainMessage(wallet, text);
-      const total = Number(await getMainMessageCount());
-      const nextCount = Math.min(Math.max(loadedCount, PAGE_SIZE), total);
-      await loadMessages(nextCount || PAGE_SIZE);
+      await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to post message');
       throw err;
@@ -143,20 +111,18 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     }
   };
 
-  const handleDelete = async (mainIndex: bigint) => {
-    setDeletingIndex(mainIndex);
+  const handleDelete = async (key: string) => {
+    setDeletingKey(key);
     setError(null);
     try {
-      await deleteMainMessage(mainIndex);
-      await refresh();
+      await deleteMainMessage(key);
+      setMessages((prev) => prev.filter((m) => m.key !== key));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete');
     } finally {
-      setDeletingIndex(null);
+      setDeletingKey(null);
     }
   };
-
-  const hasMore = totalCount > BigInt(loadedCount);
 
   return (
     <section className="flex flex-col min-h-[420px] rounded-xl bg-slate-900/50 ring-1 ring-slate-800 overflow-hidden">
@@ -213,33 +179,19 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
         )}
 
         {!loading &&
-          messages.map((msg) => {
-            const ts =
-              msg.body?.timestamp ?? Number(msg.chain.createdAt);
-            const replyCount = Number(msg.chain.repliesCount);
-            return (
-              <article
-                key={msg.chain.index.toString()}
-                className="border-b border-slate-800/60 last:border-0"
-              >
-                <MessageRow
-                  message={msg}
-                  timestamp={ts}
-                  canDelete={canDeleteMessage(msg)}
-                  deleting={deletingIndex === msg.chain.index}
-                  onDelete={() => handleDelete(msg.chain.index)}
-                />
-                <ReplyThread
-                  mainMsgIndex={msg.chain.index}
-                  repliesCount={replyCount}
-                  wallet={wallet}
-                  isMod={isMod}
-                  canPost={canPost}
-                  onChanged={refresh}
-                />
-              </article>
-            );
-          })}
+          messages.map((msg) => (
+            <article
+              key={msg.key}
+              className="border-b border-slate-800/60 last:border-0"
+            >
+              <MessageRow
+                message={msg}
+                canDelete={canDeleteMessage(msg)}
+                deleting={deletingKey === msg.key}
+                onDelete={() => handleDelete(msg.key)}
+              />
+            </article>
+          ))}
       </div>
 
       <footer className="shrink-0 border-t border-slate-800 p-4">

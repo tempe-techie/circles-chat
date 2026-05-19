@@ -1,24 +1,13 @@
 import type { Address } from 'viem';
 import type { UserProfile } from '../circles/profile';
 
-export type ChainMessage = {
+export type StoredMessage = {
+  key: string;
   author: Address;
-  createdAt: bigint;
-  deleted: boolean;
-  index: bigint;
-  repliesCount: bigint;
-  url: string;
-};
-
-export type MessageBody = {
-  author: string;
   text: string;
   timestamp: number;
 };
 
-export type ChatMessage = {
-  chain: ChainMessage;
-  body: MessageBody | null;
+export type ChatMessage = StoredMessage & {
   profile: UserProfile | null;
-  loadError?: string;
 };

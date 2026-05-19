@@ -1,7 +1,6 @@
 import { getAddress } from 'viem';
 import { fetchUserProfile } from '../circles/profile';
-import { fetchMessageBody } from './arweave';
-import type { ChainMessage, ChatMessage } from './types';
+import type { ChatMessage, StoredMessage } from './types';
 
 const profileCache = new Map<string, ReturnType<typeof fetchUserProfile>>();
 
@@ -15,28 +14,15 @@ function cachedProfile(address: string) {
   return pending;
 }
 
-export async function enrichChainMessage(
-  chain: ChainMessage,
+export async function enrichMessage(
+  message: StoredMessage,
 ): Promise<ChatMessage> {
-  try {
-    const [body, profile] = await Promise.all([
-      fetchMessageBody(chain.url),
-      cachedProfile(chain.author),
-    ]);
-    return { chain, body, profile };
-  } catch (err) {
-    const message = err instanceof Error ? err.message : 'Failed to load message';
-    return {
-      chain,
-      body: null,
-      profile: await cachedProfile(chain.author).catch(() => null),
-      loadError: message,
-    };
-  }
+  const profile = await cachedProfile(message.author).catch(() => null);
+  return { ...message, profile };
 }
 
-export async function enrichChainMessages(
-  messages: ChainMessage[],
+export async function enrichMessages(
+  messages: StoredMessage[],
 ): Promise<ChatMessage[]> {
-  return Promise.all(messages.map(enrichChainMessage));
+  return Promise.all(messages.map(enrichMessage));
 }
