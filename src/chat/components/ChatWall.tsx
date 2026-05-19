@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAddress } from 'viem';
 import { deleteMainMessage, postMainMessage } from '../actions';
 import { fetchMessages } from '../api';
@@ -17,6 +17,15 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+
+  const listRef = useRef<HTMLDivElement>(null);
+  const skipScrollToBottomRef = useRef(false);
+
+  const scrollToBottom = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  }, []);
 
   const inHost = isMiniappMode();
   const canPost = Boolean(wallet && inHost);
@@ -71,6 +80,15 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     };
   }, []);
 
+  useEffect(() => {
+    if (loading || messages.length === 0) return;
+    if (skipScrollToBottomRef.current) {
+      skipScrollToBottomRef.current = false;
+      return;
+    }
+    requestAnimationFrame(() => scrollToBottom());
+  }, [loading, messages, scrollToBottom]);
+
   const loadMore = async () => {
     if (messages.length === 0) return;
     const oldestKey = messages[0]?.key;
@@ -78,6 +96,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
 
     setLoadingMore(true);
     setError(null);
+    skipScrollToBottomRef.current = true;
     try {
       await loadMessages(PAGE_SIZE, oldestKey, true);
     } catch (err) {
@@ -133,7 +152,10 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
         </p>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-4 py-2 min-h-[240px] max-h-[50vh]">
+      <div
+        ref={listRef}
+        className="flex-1 overflow-y-auto px-4 py-2 min-h-[240px] max-h-[50vh]"
+      >
         {!inHost && (
           <p className="mb-3 text-xs text-amber-400/90 bg-amber-950/30 rounded-lg px-3 py-2">
             Open in the{' '}
