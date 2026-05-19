@@ -62,8 +62,7 @@ export async function deleteMessage(key) {
 }
 
 export async function listMessages({ limit = 10, beforeKey } = {}) {
-  //let query = datastore.createQuery(KIND).order('__key__', { descending: true });
-  let query = datastore.createQuery(KIND).order('__key__'); // TODO: revert to descending order after testing
+  let query = datastore.createQuery(KIND).order('__key__', { descending: true });
 
   if (beforeKey) {
     query = query.start(datastore.key([KIND, beforeKey]));
