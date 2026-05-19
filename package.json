@@ -11,15 +11,18 @@
     "gcp-build": "npm run build"
   },
   "dependencies": {
-    "@aboutcircles/miniapp-sdk": "^0.1.0",
-    "@aboutcircles/sdk-core": "^0.1.31",
-    "@aboutcircles/sdk-profiles": "^0.1.31",
-    "@aboutcircles/sdk-types": "^0.1.31",
-    "@aboutcircles/sdk-utils": "^0.1.31",
-    "express": "^4.21.2",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1",
-    "viem": "^2.21.0"
+    "@aboutcircles/miniapp-sdk": "0.1.0",
+    "@aboutcircles/sdk-core": "0.1.31",
+    "@aboutcircles/sdk-profiles": "0.1.31",
+    "@aboutcircles/sdk-types": "0.1.31",
+    "@aboutcircles/sdk-utils": "0.1.31",
+    "@google-cloud/datastore": "9.2.1",
+    "@google-cloud/tasks": "6.2.2",
+    "arweave": "1.15.7",
+    "express": "4.21.2",
+    "react": "18.3.1",
+    "react-dom": "18.3.1",
+    "viem": "2.21.0"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.0.0",
