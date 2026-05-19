@@ -2,6 +2,7 @@ import { getAddress } from 'viem';
 import { formatRelativeTime, shortenAddress } from '../format';
 import type { ChatMessage } from '../types';
 import { MessageAvatar } from './MessageAvatar';
+import { MessageReactions } from './MessageReactions';
 
 export function displayNameFor(message: ChatMessage): string {
   if (message.profile?.name) return message.profile.name;
@@ -17,11 +18,17 @@ export function MessageRow({
   canDelete,
   deleting,
   onDelete,
+  canReact,
+  reacting,
+  onReact,
 }: {
   message: ChatMessage;
   canDelete?: boolean;
   deleting?: boolean;
   onDelete?: () => void;
+  canReact?: boolean;
+  reacting?: boolean;
+  onReact?: () => void;
 }) {
   return (
     <div className="flex gap-3 py-3">
@@ -52,6 +59,14 @@ export function MessageRow({
         <p className="mt-1 text-sm whitespace-pre-wrap break-words text-slate-200">
           {message.text}
         </p>
+        {onReact && (
+          <MessageReactions
+            message={message}
+            canReact={Boolean(canReact)}
+            reacting={Boolean(reacting)}
+            onReact={onReact}
+          />
+        )}
       </div>
     </div>
   );

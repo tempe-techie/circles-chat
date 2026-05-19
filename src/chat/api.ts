@@ -1,5 +1,9 @@
 import { MAX_MESSAGE_LENGTH } from './constants';
-import type { StoredMessage } from './types';
+import type {
+  ReactionBuildResponse,
+  ReactionConfirmResponse,
+  StoredMessage,
+} from './types';
 
 export type MessagesPage = {
   messages: StoredMessage[];
@@ -21,10 +25,14 @@ export async function fetchModerators(): Promise<string[]> {
 export async function fetchMessages(
   limit: number,
   cursor?: string,
+  viewer?: string,
 ): Promise<MessagesPage> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) {
     params.set('cursor', cursor);
+  }
+  if (viewer) {
+    params.set('viewer', viewer);
   }
 
   const res = await fetch(`/api/chat/messages?${params}`);
@@ -87,4 +95,53 @@ export async function deleteMessage(
   if (!res.ok) {
     throw new Error(data.error ?? 'Failed to delete message');
   }
+}
+
+export async function buildMessageReaction(
+  messageKey: string,
+  reactor: string,
+): Promise<ReactionBuildResponse> {
+  const res = await fetch(
+    `/api/chat/messages/${encodeURIComponent(messageKey)}/reactions/build`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reactor }),
+    },
+  );
+
+  const data = (await res.json()) as ReactionBuildResponse & {
+    error?: string;
+  };
+
+  if (!res.ok) {
+    throw new Error(data.error ?? 'Failed to build reaction payment');
+  }
+
+  return data;
+}
+
+export async function confirmMessageReaction(
+  messageKey: string,
+  reactor: string,
+  paymentData: string,
+): Promise<ReactionConfirmResponse> {
+  const res = await fetch(
+    `/api/chat/messages/${encodeURIComponent(messageKey)}/reactions/confirm`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reactor, paymentData }),
+    },
+  );
+
+  const data = (await res.json()) as ReactionConfirmResponse & {
+    error?: string;
+  };
+
+  if (!res.ok) {
+    throw new Error(data.error ?? 'Failed to confirm reaction');
+  }
+
+  return data;
 }

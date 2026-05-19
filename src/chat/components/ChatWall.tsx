@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAddress } from 'viem';
-import { deleteMainMessage, postMainMessage } from '../actions';
+import { deleteMainMessage, postMainMessage, reactToMessage } from '../actions';
 import { fetchMessages, fetchModerators } from '../api';
-import { PAGE_SIZE } from '../constants';
+import { PAGE_SIZE, REACTION_CRC_COST } from '../constants';
 import { enrichMessages } from '../enrich';
 import type { ChatMessage } from '../types';
 import { isMiniappMode } from '../../host/bridge';
@@ -17,6 +17,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
+  const [reactingKey, setReactingKey] = useState<string | null>(null);
   const [moderatorAddresses, setModeratorAddresses] = useState<Set<string>>(
     () => new Set(),
   );
@@ -36,7 +37,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
 
   const loadMessages = useCallback(
     async (limit: number, cursor?: string, append = false) => {
-      const page = await fetchMessages(limit, cursor);
+      const page = await fetchMessages(limit, cursor, wallet ?? undefined);
       const enriched = await enrichMessages(page.messages);
       nextCursorRef.current = page.nextCursor;
       setHasMore(page.hasMore);
@@ -46,7 +47,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
         setMessages(enriched);
       }
     },
-    [],
+    [wallet],
   );
 
   const refresh = useCallback(async () => {
@@ -66,7 +67,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
       setError(null);
       try {
         const [page, moderators] = await Promise.all([
-          fetchMessages(PAGE_SIZE),
+          fetchMessages(PAGE_SIZE, undefined, wallet ?? undefined),
           fetchModerators(),
         ]);
         if (cancelled) return;
@@ -90,7 +91,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [wallet]);
 
   useEffect(() => {
     if (loading || messages.length === 0) return;
@@ -140,6 +141,36 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
       throw err;
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const canReactToMessage = (msg: ChatMessage) => {
+    if (!wallet || !inHost) return false;
+    try {
+      return getAddress(msg.author) !== getAddress(wallet);
+    } catch {
+      return false;
+    }
+  };
+
+  const handleReact = async (msg: ChatMessage) => {
+    if (!wallet) return;
+    if (msg.reactions?.reactedByMe) return;
+
+    const confirmed = window.confirm(
+      `Reactions cost ${REACTION_CRC_COST} CRC, which is sent to the message author. Continue?`,
+    );
+    if (!confirmed) return;
+
+    setReactingKey(msg.key);
+    setError(null);
+    try {
+      await reactToMessage(msg.key, wallet);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to react');
+    } finally {
+      setReactingKey(null);
     }
   };
 
@@ -224,6 +255,9 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
                 canDelete={canDeleteMessage(msg)}
                 deleting={deletingKey === msg.key}
                 onDelete={() => handleDelete(msg.key)}
+                canReact={canReactToMessage(msg)}
+                reacting={reactingKey === msg.key}
+                onReact={() => handleReact(msg)}
               />
             </article>
           ))}

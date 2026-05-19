@@ -15,6 +15,8 @@
     "@aboutcircles/miniapp-sdk": "0.1.0",
     "@aboutcircles/sdk-core": "0.1.31",
     "@aboutcircles/sdk-profiles": "0.1.31",
+    "@aboutcircles/sdk-rpc": "^0.1.31",
+    "@aboutcircles/sdk-transfers": "^0.1.31",
     "@aboutcircles/sdk-types": "0.1.31",
     "@aboutcircles/sdk-utils": "0.1.31",
     "@google-cloud/datastore": "9.2.1",
