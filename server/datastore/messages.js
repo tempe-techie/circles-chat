@@ -61,19 +61,23 @@ export async function deleteMessage(key) {
   await datastore.delete(entityKey);
 }
 
-export async function listMessages({ limit = 10, beforeKey } = {}) {
+export async function listMessages({ limit = 10, cursor } = {}) {
   let query = datastore.createQuery(KIND).order('__key__', { descending: true });
 
-  if (beforeKey) {
-    query = query.start(datastore.key([KIND, beforeKey]));
+  if (cursor) {
+    query = query.start(cursor);
   }
 
   query = query.limit(limit);
 
-  const [entities] = await datastore.runQuery(query);
+  const [entities, info] = await datastore.runQuery(query);
   const messages = entities.map(entityToMessage);
   messages.reverse();
-  return messages;
+  return {
+    messages,
+    nextCursor: info.endCursor ?? null,
+    hasMore: info.moreResults !== datastore.NO_MORE_RESULTS,
+  };
 }
 
 export function authorFromKey(key) {

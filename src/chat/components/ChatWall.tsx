@@ -20,6 +20,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
 
   const listRef = useRef<HTMLDivElement>(null);
   const skipScrollToBottomRef = useRef(false);
+  const nextCursorRef = useRef<string | null>(null);
 
   const scrollToBottom = useCallback(() => {
     const el = listRef.current;
@@ -31,11 +32,12 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   const canPost = Boolean(wallet && inHost);
 
   const loadMessages = useCallback(
-    async (limit: number, beforeKey?: string, append = false) => {
-      const stored = await fetchMessages(limit, beforeKey);
-      const enriched = await enrichMessages(stored);
-      setHasMore(stored.length === limit);
-      if (append && beforeKey) {
+    async (limit: number, cursor?: string, append = false) => {
+      const page = await fetchMessages(limit, cursor);
+      const enriched = await enrichMessages(page.messages);
+      nextCursorRef.current = page.nextCursor;
+      setHasMore(page.hasMore);
+      if (append && cursor) {
         setMessages((prev) => [...enriched, ...prev]);
       } else {
         setMessages(enriched);
@@ -60,11 +62,12 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
       setLoading(true);
       setError(null);
       try {
-        const stored = await fetchMessages(PAGE_SIZE);
+        const page = await fetchMessages(PAGE_SIZE);
         if (cancelled) return;
-        const enriched = await enrichMessages(stored);
+        const enriched = await enrichMessages(page.messages);
+        nextCursorRef.current = page.nextCursor;
         setMessages(enriched);
-        setHasMore(stored.length === PAGE_SIZE);
+        setHasMore(page.hasMore);
       } catch (err) {
         if (!cancelled) {
           setError(
@@ -90,15 +93,14 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   }, [loading, messages, scrollToBottom]);
 
   const loadMore = async () => {
-    if (messages.length === 0) return;
-    const oldestKey = messages[0]?.key;
-    if (!oldestKey) return;
+    const cursor = nextCursorRef.current;
+    if (!cursor) return;
 
     setLoadingMore(true);
     setError(null);
     skipScrollToBottomRef.current = true;
     try {
-      await loadMessages(PAGE_SIZE, oldestKey, true);
+      await loadMessages(PAGE_SIZE, cursor, true);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load more');
     } finally {

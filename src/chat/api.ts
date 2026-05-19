@@ -1,26 +1,33 @@
 import { MAX_MESSAGE_LENGTH } from './constants';
 import type { StoredMessage } from './types';
 
+export type MessagesPage = {
+  messages: StoredMessage[];
+  nextCursor: string | null;
+  hasMore: boolean;
+};
+
 export async function fetchMessages(
   limit: number,
-  beforeKey?: string,
-): Promise<StoredMessage[]> {
+  cursor?: string,
+): Promise<MessagesPage> {
   const params = new URLSearchParams({ limit: String(limit) });
-  if (beforeKey) {
-    params.set('before', beforeKey);
+  if (cursor) {
+    params.set('cursor', cursor);
   }
 
   const res = await fetch(`/api/chat/messages?${params}`);
-  const data = (await res.json()) as {
-    messages?: StoredMessage[];
-    error?: string;
-  };
+  const data = (await res.json()) as MessagesPage & { error?: string };
 
   if (!res.ok) {
     throw new Error(data.error ?? 'Failed to load messages');
   }
 
-  return data.messages ?? [];
+  return {
+    messages: data.messages ?? [],
+    nextCursor: data.nextCursor ?? null,
+    hasMore: Boolean(data.hasMore),
+  };
 }
 
 export async function postMessage(

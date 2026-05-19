@@ -30,13 +30,16 @@ router.get('/messages', async (req, res) => {
       limit = Math.min(Math.floor(parsed), MAX_LIMIT);
     }
 
-    const before =
-      typeof req.query.before === 'string' && req.query.before.trim()
-        ? req.query.before.trim()
+    const cursor =
+      typeof req.query.cursor === 'string' && req.query.cursor.trim()
+        ? req.query.cursor.trim()
         : undefined;
 
-    const messages = await listMessages({ limit, beforeKey: before });
-    return res.json({ messages });
+    const { messages, nextCursor, hasMore } = await listMessages({
+      limit,
+      cursor,
+    });
+    return res.json({ messages, nextCursor, hasMore });
   } catch (err) {
     console.error('Chat list error:', err);
     const message =
