@@ -9,6 +9,38 @@ const arweave = Arweave.init({
 
 const MAX_TEXT_LENGTH = 4000;
 
+function formatArweavePostResponse(response) {
+  const errorBody =
+    response.data?.error ??
+    (typeof response.data === 'string' ? response.data : response.data);
+  return {
+    status: response.status,
+    statusText: response.statusText,
+    error: errorBody,
+  };
+}
+
+async function logArweaveUploadContext(keyFile, transaction, payloadByteLength) {
+  try {
+    const address = await arweave.wallets.jwkToAddress(keyFile);
+    const balanceWinston = await arweave.wallets.getBalance(address);
+    const balanceAr = arweave.ar.winstonToAr(balanceWinston);
+    console.log('Arweave upload context:', {
+      walletAddress: address,
+      balanceAr,
+      transactionId: transaction.id,
+      dataSize: transaction.data_size,
+      reward: transaction.reward,
+      payloadByteLength,
+    });
+  } catch (err) {
+    console.warn(
+      'Arweave upload context: could not load wallet/balance',
+      err instanceof Error ? err.message : err,
+    );
+  }
+}
+
 export async function uploadChatMessage({ author, text, timestamp }) {
   const trimmed = text?.trim();
   if (!author || !trimmed) {
@@ -41,11 +73,25 @@ export async function uploadChatMessage({ author, text, timestamp }) {
 
   await arweave.transactions.sign(transaction, keyFile);
 
+  await logArweaveUploadContext(keyFile, transaction, data.byteLength);
+
   const response = await arweave.transactions.post(transaction);
 
   if (response.status !== 200) {
+    const details = formatArweavePostResponse(response);
+    console.error('Arweave upload failed:', details);
+    const detailText = [
+      details.statusText,
+      typeof details.error === 'string'
+        ? details.error
+        : details.error != null
+          ? JSON.stringify(details.error)
+          : null,
+    ]
+      .filter(Boolean)
+      .join(' — ');
     throw new Error(
-      `Failed to upload to Arweave. Status: ${response.status}`,
+      `Failed to upload to Arweave. Status: ${response.status}${detailText ? ` (${detailText})` : ''}`,
     );
   }
 
