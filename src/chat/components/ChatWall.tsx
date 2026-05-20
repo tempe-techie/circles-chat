@@ -251,7 +251,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
       const recipientName = reactConfirmMessage
         ? displayNameFor(reactConfirmMessage)
         : 'this user';
-      reactEligibilityError = `You can't send ${REACTION_CRC_COST} CRC to ${recipientName} — no Circles trust path connects you (max transferable: ${formatCrcBalance(maxFlow)} CRC). Connect via shared trusted contacts and try again.`;
+      reactEligibilityError = `You can only send up to ${formatCrcBalance(maxFlow)} CRC to ${recipientName} right now. Reactions require ${REACTION_CRC_COST} CRC.`;
     }
   }
 
@@ -259,7 +259,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     ? [
         `Liking this message includes a ${REACTION_CRC_COST} CRC tip to ${displayNameFor(reactConfirmMessage)}.`,
         checkingEligibility
-          ? 'Checking your CRC balance and a transfer path…'
+          ? 'Checking how much CRC you can send…'
           : crcBalance !== null
             ? `Your balance: ${formatCrcBalance(crcBalance)} CRC`
             : null,

@@ -22,6 +22,7 @@ export async function fetchMaxFlowCrc(
   const atto = await rpc.pathfinder.findMaxFlow({
     from: fromAddr,
     to: toAddr,
+    useWrappedBalances: true,
   });
   return CirclesConverter.attoCirclesToCircles(atto);
 }

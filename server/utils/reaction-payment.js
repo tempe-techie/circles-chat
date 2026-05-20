@@ -205,7 +205,7 @@ export async function buildReactionTransfer({ messageAuthor, reactor, paymentDat
     getAddress(reactor),
     getAddress(messageAuthor),
     amount,
-    { txData },
+    { txData, useWrappedBalances: true },
   );
 
   return txs.map((tx) => ({
