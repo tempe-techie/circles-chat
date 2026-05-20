@@ -6,8 +6,9 @@ import { PAGE_SIZE, REACTION_CRC_COST } from '../constants';
 import { enrichMessages } from '../enrich';
 import type { ChatMessage } from '../types';
 import { isMiniappMode } from '../../host/bridge';
+import { ConfirmDialog } from './ConfirmDialog';
 import { MessageComposer } from './MessageComposer';
-import { MessageRow } from './MessageRow';
+import { MessageRow, displayNameFor } from './MessageRow';
 
 export function ChatWall({ wallet }: { wallet: string | null }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -18,6 +19,8 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   const [submitting, setSubmitting] = useState(false);
   const [deletingKey, setDeletingKey] = useState<string | null>(null);
   const [reactingKey, setReactingKey] = useState<string | null>(null);
+  const [reactConfirmMessage, setReactConfirmMessage] =
+    useState<ChatMessage | null>(null);
   const [moderatorAddresses, setModeratorAddresses] = useState<Set<string>>(
     () => new Set(),
   );
@@ -153,19 +156,21 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     }
   };
 
-  const handleReact = async (msg: ChatMessage) => {
+  const handleReact = (msg: ChatMessage) => {
     if (!wallet) return;
     if (msg.reactions?.reactedByMe) return;
+    setReactConfirmMessage(msg);
+  };
 
-    const confirmed = window.confirm(
-      `Reactions cost ${REACTION_CRC_COST} CRC, which is sent to the message author. Continue?`,
-    );
-    if (!confirmed) return;
+  const confirmReact = async () => {
+    const msg = reactConfirmMessage;
+    if (!wallet || !msg) return;
 
     setReactingKey(msg.key);
     setError(null);
     try {
       await reactToMessage(msg.key, wallet);
+      setReactConfirmMessage(null);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to react');
@@ -188,6 +193,23 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   };
 
   return (
+    <>
+    <ConfirmDialog
+      open={reactConfirmMessage !== null}
+      title="React to message?"
+      description={
+        reactConfirmMessage
+          ? `Liking this message includes a ${REACTION_CRC_COST} CRC tip to ${displayNameFor(reactConfirmMessage)}. Confirm below to proceed.`
+          : ''
+      }
+      confirmLabel={`React (${REACTION_CRC_COST} CRC)`}
+      confirming={reactConfirmMessage !== null && reactingKey === reactConfirmMessage.key}
+      onConfirm={confirmReact}
+      onCancel={() => {
+        if (reactingKey === reactConfirmMessage?.key) return;
+        setReactConfirmMessage(null);
+      }}
+    />
     <section className="flex flex-col min-h-[420px] rounded-xl bg-slate-900/50 ring-1 ring-slate-800 overflow-hidden">
       <header className="shrink-0 border-b border-slate-800 px-4 py-3">
         <h2 className="text-sm font-semibold text-slate-200"># general</h2>
@@ -278,5 +300,6 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
         />
       </footer>
     </section>
+    </>
   );
 }
