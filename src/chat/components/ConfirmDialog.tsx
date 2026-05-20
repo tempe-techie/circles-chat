@@ -93,7 +93,7 @@ export function ConfirmDialog({
             {confirming
               ? 'Sending…'
               : loading
-                ? 'Checking balance…'
+                ? 'Checking…'
                 : confirmLabel}
           </button>
         </div>

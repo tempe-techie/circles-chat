@@ -5,7 +5,7 @@ import { fetchMessages, fetchModerators } from '../api';
 import { PAGE_SIZE, REACTION_CRC_COST } from '../constants';
 import { enrichMessages } from '../enrich';
 import type { ChatMessage } from '../types';
-import { fetchUserCrcBalance, formatCrcBalance } from '../../circles/balance';
+import { fetchMaxFlowCrc, fetchUserCrcBalance, formatCrcBalance } from '../../circles/balance';
 import { isMiniappMode } from '../../host/bridge';
 import { ConfirmDialog } from './ConfirmDialog';
 import { MessageComposer } from './MessageComposer';
@@ -24,6 +24,8 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     useState<ChatMessage | null>(null);
   const [crcBalance, setCrcBalance] = useState<number | null>(null);
   const [crcBalanceLoading, setCrcBalanceLoading] = useState(false);
+  const [maxFlow, setMaxFlow] = useState<number | null>(null);
+  const [maxFlowLoading, setMaxFlowLoading] = useState(false);
   const [reactModalError, setReactModalError] = useState<string | null>(null);
   const [moderatorAddresses, setModeratorAddresses] = useState<Set<string>>(
     () => new Set(),
@@ -200,25 +202,64 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
 
     if (crcBalance !== null) {
       void refreshCrcBalance(wallet, { silent: true });
-      return;
+    } else {
+      void refreshCrcBalance(wallet);
     }
 
-    void refreshCrcBalance(wallet);
+    setMaxFlow(null);
+    setMaxFlowLoading(true);
+    const requestedAddress = wallet;
+    const requestedMessage = msg;
+    void fetchMaxFlowCrc(wallet, msg.author)
+      .then((flow) => {
+        if (
+          requestedAddress === wallet &&
+          requestedMessage.key === msg.key
+        ) {
+          setMaxFlow(flow);
+        }
+      })
+      .catch((err) => {
+        if (
+          requestedAddress === wallet &&
+          requestedMessage.key === msg.key
+        ) {
+          setReactModalError(
+            err instanceof Error
+              ? err.message
+              : 'Could not check if a transfer path exists',
+          );
+        }
+      })
+      .finally(() => {
+        setMaxFlowLoading(false);
+      });
   };
 
-  const canAffordReaction =
+  const hasEnoughBalance =
     crcBalance !== null && crcBalance >= REACTION_CRC_COST;
+  const hasTransferPath =
+    maxFlow !== null && maxFlow >= REACTION_CRC_COST;
+  const canAffordReaction = hasEnoughBalance && hasTransferPath;
+  const checkingEligibility = crcBalanceLoading || maxFlowLoading;
 
-  const reactBalanceError =
-    !crcBalanceLoading && crcBalance !== null && !canAffordReaction
-      ? `Your balance is ${formatCrcBalance(crcBalance)} CRC. You need at least ${REACTION_CRC_COST} CRC to react.`
-      : null;
+  let reactEligibilityError: string | null = null;
+  if (!checkingEligibility) {
+    if (crcBalance !== null && !hasEnoughBalance) {
+      reactEligibilityError = `Your balance is ${formatCrcBalance(crcBalance)} CRC. You need at least ${REACTION_CRC_COST} CRC to react.`;
+    } else if (maxFlow !== null && !hasTransferPath) {
+      const recipientName = reactConfirmMessage
+        ? displayNameFor(reactConfirmMessage)
+        : 'this user';
+      reactEligibilityError = `You can't send ${REACTION_CRC_COST} CRC to ${recipientName} — no Circles trust path connects you (max transferable: ${formatCrcBalance(maxFlow)} CRC). Connect via shared trusted contacts and try again.`;
+    }
+  }
 
   const reactModalDescription = reactConfirmMessage
     ? [
         `Liking this message includes a ${REACTION_CRC_COST} CRC tip to ${displayNameFor(reactConfirmMessage)}.`,
-        crcBalanceLoading
-          ? 'Checking your CRC balance…'
+        checkingEligibility
+          ? 'Checking your CRC balance and a transfer path…'
           : crcBalance !== null
             ? `Your balance: ${formatCrcBalance(crcBalance)} CRC`
             : null,
@@ -229,7 +270,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
 
   const confirmReact = async () => {
     const msg = reactConfirmMessage;
-    if (!wallet || !msg || crcBalanceLoading || !canAffordReaction) return;
+    if (!wallet || !msg || checkingEligibility || !canAffordReaction) return;
 
     setReactingKey(msg.key);
     setReactModalError(null);
@@ -267,9 +308,9 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
       title="Like message and tip the author?"
       description={reactModalDescription}
       confirmLabel={`Like & tip (${REACTION_CRC_COST} CRC)`}
-      loading={crcBalanceLoading}
+      loading={checkingEligibility}
       confirmDisabled={!canAffordReaction}
-      error={reactModalError ?? reactBalanceError}
+      error={reactModalError ?? reactEligibilityError}
       confirming={reactConfirmMessage !== null && reactingKey === reactConfirmMessage.key}
       onConfirm={confirmReact}
       onCancel={() => {
