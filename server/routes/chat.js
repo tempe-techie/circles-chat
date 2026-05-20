@@ -19,6 +19,7 @@ import {
   createReactionPaymentData,
   finalizeReactionPaymentData,
   findMatchingReactionTransfer,
+  findReactionTransferForMessage,
   reactionPaymentExpiry,
   verifyReactionPaymentData,
 } from '../utils/reaction-payment.js';
@@ -220,6 +221,20 @@ router.post('/messages/:key/reactions/build', async (req, res) => {
     const existing = await getReaction(key, reactorAddress);
     if (existing) {
       return res.status(409).json({ error: 'You already reacted to this message' });
+    }
+
+    const recovered = await findReactionTransferForMessage({
+      messageId: key,
+      recipient: author,
+      reactor: reactorAddress,
+    });
+    if (recovered) {
+      const reaction = await saveReaction({
+        messageId: key,
+        reactionAuthor: reactorAddress,
+        timestamp: Math.floor(Date.now() / 1000),
+      });
+      return res.json({ status: 'ready', reaction, recovered: true });
     }
 
     const paymentDataBase = createReactionPaymentData({

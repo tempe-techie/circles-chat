@@ -52,10 +52,19 @@ export async function reactToMessage(
   reactor: string,
 ): Promise<void> {
   const reactorAddress = getAddress(reactor);
-  const { paymentData, transactions } = await buildMessageReaction(
+  const buildResult = await buildMessageReaction(
     messageKey,
     reactorAddress,
   );
+
+  if ('status' in buildResult && buildResult.status === 'ready') {
+    return;
+  }
+
+  const { paymentData, transactions } = buildResult as Extract<
+    typeof buildResult,
+    { paymentData: string }
+  >;
 
   await sendTransactions(transactions.map(formatTxForHost));
 

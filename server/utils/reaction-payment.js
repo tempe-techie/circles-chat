@@ -104,10 +104,14 @@ export function parseReactionPaymentData(paymentData) {
   };
 }
 
+function signedPayloadBase(payloadB64) {
+  return `${PAYMENT_PREFIX}.${payloadB64}`;
+}
+
 export async function verifyReactionPaymentData(paymentData) {
   const parsed = parseReactionPaymentData(paymentData);
   const secret = await getHmacSecret();
-  const expected = signPayload(parsed.payloadB64, secret);
+  const expected = signPayload(signedPayloadBase(parsed.payloadB64), secret);
 
   const a = Buffer.from(parsed.signature, 'hex');
   const b = Buffer.from(expected, 'hex');
@@ -155,11 +159,32 @@ function paymentDataMatchesEventData(paymentData, eventData) {
   return false;
 }
 
-export async function findMatchingReactionTransfer({
-  paymentData,
-  recipient,
-  reactor,
-}) {
+const PAYMENT_DATA_PATTERN =
+  /crc-reaction\.[A-Za-z0-9_-]+\.[a-f0-9]{64}/g;
+
+function extractReactionPaymentDataStrings(eventData) {
+  const found = new Set();
+  if (typeof eventData !== 'string') return found;
+
+  for (const match of eventData.matchAll(PAYMENT_DATA_PATTERN)) {
+    found.add(match[0]);
+  }
+
+  if (eventData.startsWith('0x')) {
+    try {
+      const decoded = Buffer.from(eventData.slice(2), 'hex').toString('utf8');
+      for (const match of decoded.matchAll(PAYMENT_DATA_PATTERN)) {
+        found.add(match[0]);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  return found;
+}
+
+async function scanRecipientTransferEvents(recipient, reactor, onEvent) {
   const limit = 100;
   let cursor = null;
 
@@ -184,9 +209,9 @@ export async function findMatchingReactionTransfer({
       if (!to || !data) continue;
       if (getAddress(to) !== getAddress(recipient)) continue;
       if (from && getAddress(from) !== getAddress(reactor)) continue;
-      if (!paymentDataMatchesEventData(paymentData, data)) continue;
 
-      return event;
+      const handled = await onEvent(event, data);
+      if (handled) return event;
     }
 
     if (!result.hasMore || !result.nextCursor) break;
@@ -194,6 +219,41 @@ export async function findMatchingReactionTransfer({
   }
 
   return null;
+}
+
+export async function findReactionTransferForMessage({
+  messageId,
+  recipient,
+  reactor,
+}) {
+  let matched = null;
+
+  await scanRecipientTransferEvents(recipient, reactor, async (_event, data) => {
+    for (const candidate of extractReactionPaymentDataStrings(data)) {
+      try {
+        const parsed = await verifyReactionPaymentData(candidate);
+        if (parsed.messageId !== messageId) continue;
+        if (parsed.reactor !== getAddress(reactor)) continue;
+        matched = { paymentData: candidate, parsed };
+        return true;
+      } catch {
+        /* try next candidate */
+      }
+    }
+    return false;
+  });
+
+  return matched;
+}
+
+export async function findMatchingReactionTransfer({
+  paymentData,
+  recipient,
+  reactor,
+}) {
+  return scanRecipientTransferEvents(recipient, reactor, async (_event, data) =>
+    paymentDataMatchesEventData(paymentData, data),
+  );
 }
 
 export async function buildReactionTransfer({ messageAuthor, reactor, paymentData }) {
