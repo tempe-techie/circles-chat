@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAddress } from 'viem';
 import { deleteMainMessage, postMainMessage, reactToMessage } from '../actions';
 import { fetchMessages, fetchModerators } from '../api';
-import { PAGE_SIZE, REACTION_CRC_COST } from '../constants';
+import { PAGE_SIZE, POLL_INTERVAL_MS, REACTION_CRC_COST } from '../constants';
 import { enrichMessages } from '../enrich';
 import type { ChatMessage } from '../types';
 import { fetchMaxFlowCrc, fetchUserCrcBalance, formatCrcBalance } from '../../circles/balance';
@@ -10,6 +10,10 @@ import { isMiniappMode } from '../../host/bridge';
 import { ConfirmDialog } from './ConfirmDialog';
 import { MessageComposer } from './MessageComposer';
 import { MessageRow, displayNameFor } from './MessageRow';
+
+function isNearBottom(el: HTMLElement, threshold = 80): boolean {
+  return el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
+}
 
 export function ChatWall({ wallet }: { wallet: string | null }) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -34,6 +38,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   const listRef = useRef<HTMLDivElement>(null);
   const skipScrollToBottomRef = useRef(false);
   const nextCursorRef = useRef<string | null>(null);
+  const messagesLengthRef = useRef(0);
 
   const scrollToBottom = useCallback(() => {
     const el = listRef.current;
@@ -59,15 +64,26 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     [wallet],
   );
 
-  const refresh = useCallback(async () => {
-    setError(null);
-    try {
-      const count = Math.max(messages.length, PAGE_SIZE);
-      await loadMessages(count);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load chat');
-    }
-  }, [loadMessages, messages.length]);
+  const refresh = useCallback(
+    async ({ silent = false }: { silent?: boolean } = {}) => {
+      if (!silent) setError(null);
+
+      const el = listRef.current;
+      if (silent && el && !isNearBottom(el)) {
+        skipScrollToBottomRef.current = true;
+      }
+
+      try {
+        const count = Math.max(messagesLengthRef.current, PAGE_SIZE);
+        await loadMessages(count);
+      } catch (err) {
+        if (!silent) {
+          setError(err instanceof Error ? err.message : 'Failed to load chat');
+        }
+      }
+    },
+    [loadMessages],
+  );
 
   const refreshCrcBalance = useCallback(
     async (address: string, { silent = false }: { silent?: boolean } = {}) => {
@@ -123,6 +139,35 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
       cancelled = true;
     };
   }, [wallet]);
+
+  useEffect(() => {
+    messagesLengthRef.current = messages.length;
+  }, [messages.length]);
+
+  useEffect(() => {
+    if (loading) return;
+
+    let cancelled = false;
+
+    const poll = () => {
+      if (cancelled || document.hidden) return;
+      if (submitting || deletingKey || reactingKey) return;
+      void refresh({ silent: true });
+    };
+
+    const onVisibility = () => {
+      if (!document.hidden) poll();
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    const intervalId = window.setInterval(poll, POLL_INTERVAL_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [loading, refresh, submitting, deletingKey, reactingKey]);
 
   useEffect(() => {
     if (!wallet || !inHost) {
