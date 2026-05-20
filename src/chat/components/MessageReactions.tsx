@@ -64,7 +64,7 @@ export function MessageReactions({
               ? `React with ${summary.emoji} (${REACTION_CRC_COST} CRC)`
               : 'Connect via Circles host to react'
         }
-        className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs text-slate-400 hover:bg-slate-800/80 hover:text-rose-300 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-slate-400"
+        className="inline-flex items-center gap-1 rounded-md py-0.5 text-xs text-slate-400 hover:bg-slate-800/80 hover:text-rose-300 disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-slate-400"
         aria-label={
           filled
             ? `You reacted. ${summary.count} reactions`
