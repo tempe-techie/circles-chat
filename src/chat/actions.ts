@@ -1,16 +1,7 @@
 import { getAddress } from 'viem';
 import { sendTransactions, signMessage } from '../host/bridge';
-import {
-  buildMessageReaction,
-  confirmMessageReaction,
-  deleteMessage,
-  postMessage,
-} from './api';
-import {
-  DELETE_SIGN_PREFIX,
-  REACTION_CONFIRM_MAX_ATTEMPTS,
-  REACTION_CONFIRM_POLL_MS,
-} from './constants';
+import { buildMessageReaction, deleteMessage, postMessage } from './api';
+import { DELETE_SIGN_PREFIX } from './constants';
 
 function toHexValue(value: string | bigint | undefined): string {
   if (value == null || value === '' || value === '0') return '0x0';
@@ -28,10 +19,6 @@ function formatTxForHost(tx: {
     data: tx.data ?? '0x',
     value: toHexValue(tx.value),
   };
-}
-
-function sleep(ms: number) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function postMainMessage(
@@ -52,38 +39,10 @@ export async function reactToMessage(
   reactor: string,
 ): Promise<void> {
   const reactorAddress = getAddress(reactor);
-  const buildResult = await buildMessageReaction(
+  const { transactions } = await buildMessageReaction(
     messageKey,
     reactorAddress,
   );
 
-  if ('status' in buildResult && buildResult.status === 'ready') {
-    return;
-  }
-
-  const { paymentData, transactions } = buildResult as Extract<
-    typeof buildResult,
-    { paymentData: string }
-  >;
-
   await sendTransactions(transactions.map(formatTxForHost));
-
-  for (let attempt = 0; attempt < REACTION_CONFIRM_MAX_ATTEMPTS; attempt += 1) {
-    const result = await confirmMessageReaction(
-      messageKey,
-      reactorAddress,
-      paymentData,
-    );
-
-    if (result.status === 'ready') return;
-    if (result.status === 'expired') {
-      throw new Error('Reaction payment expired before it was confirmed');
-    }
-
-    await sleep(REACTION_CONFIRM_POLL_MS);
-  }
-
-  throw new Error(
-    'Reaction payment is still pending. It may appear after the transfer is indexed.',
-  );
 }

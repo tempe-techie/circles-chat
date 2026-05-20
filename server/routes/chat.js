@@ -14,15 +14,7 @@ import {
   saveReaction,
 } from '../datastore/reactions.js';
 import { recoverSignerAddress, verifyAuthorSignature } from '../utils/chain.js';
-import {
-  buildReactionTransfer,
-  createReactionPaymentData,
-  finalizeReactionPaymentData,
-  findMatchingReactionTransfer,
-  findReactionTransferForMessage,
-  reactionPaymentExpiry,
-  verifyReactionPaymentData,
-} from '../utils/reaction-payment.js';
+import { buildReactionTransfer } from '../utils/reaction-payment.js';
 
 const router = Router();
 
@@ -223,109 +215,20 @@ router.post('/messages/:key/reactions/build', async (req, res) => {
       return res.status(409).json({ error: 'You already reacted to this message' });
     }
 
-    const recovered = await findReactionTransferForMessage({
-      messageId: key,
-      recipient: author,
-      reactor: reactorAddress,
-    });
-    if (recovered) {
-      const reaction = await saveReaction({
-        messageId: key,
-        reactionAuthor: reactorAddress,
-        timestamp: Math.floor(Date.now() / 1000),
-      });
-      return res.json({ status: 'ready', reaction, recovered: true });
-    }
-
-    const paymentDataBase = createReactionPaymentData({
-      messageId: key,
-      reactor: reactorAddress,
-      expiry: reactionPaymentExpiry(),
-    });
-    const paymentData = await finalizeReactionPaymentData(paymentDataBase);
-    const transactions = await buildReactionTransfer({
-      messageAuthor: author,
-      reactor: reactorAddress,
-      paymentData,
-    });
-
-    return res.json({ paymentData, transactions });
-  } catch (err) {
-    console.error('Reaction build error:', err);
-    const message =
-      err instanceof Error ? err.message : 'Internal server error';
-    return res.status(500).json({ error: message });
-  }
-});
-
-router.post('/messages/:key/reactions/confirm', async (req, res) => {
-  try {
-    const { key } = req.params;
-    const { reactor, paymentData } = req.body ?? {};
-
-    if (!key || typeof key !== 'string') {
-      return res.status(400).json({ error: 'message key is required' });
-    }
-
-    if (!reactor || typeof reactor !== 'string' || !isAddress(reactor)) {
-      return res.status(400).json({ error: 'Invalid reactor address' });
-    }
-
-    if (!paymentData || typeof paymentData !== 'string') {
-      return res.status(400).json({ error: 'paymentData is required' });
-    }
-
-    const message = await getMessage(key);
-    if (!message) {
-      return res.status(404).json({ error: 'Message not found' });
-    }
-
-    const author = getAddress(message.author);
-    const reactorAddress = getAddress(reactor);
-
-    const existing = await getReaction(key, reactorAddress);
-    if (existing) {
-      return res.json({ status: 'ready', reaction: existing });
-    }
-
-    let parsed;
-    try {
-      parsed = await verifyReactionPaymentData(paymentData);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Invalid payment data';
-      if (msg.includes('expired')) {
-        return res.json({ status: 'expired' });
-      }
-      return res.status(400).json({ error: msg });
-    }
-
-    if (parsed.messageId !== key) {
-      return res.status(400).json({ error: 'Payment does not match message' });
-    }
-
-    if (parsed.reactor !== reactorAddress) {
-      return res.status(400).json({ error: 'Payment does not match reactor' });
-    }
-
-    const transfer = await findMatchingReactionTransfer({
-      paymentData,
-      recipient: author,
-      reactor: reactorAddress,
-    });
-
-    if (!transfer) {
-      return res.json({ status: 'pending' });
-    }
-
     const reaction = await saveReaction({
       messageId: key,
       reactionAuthor: reactorAddress,
       timestamp: Math.floor(Date.now() / 1000),
     });
 
-    return res.json({ status: 'ready', reaction });
+    const transactions = await buildReactionTransfer({
+      messageAuthor: author,
+      reactor: reactorAddress,
+    });
+
+    return res.json({ status: 'ready', reaction, transactions });
   } catch (err) {
-    console.error('Reaction confirm error:', err);
+    console.error('Reaction build error:', err);
     const message =
       err instanceof Error ? err.message : 'Internal server error';
     return res.status(500).json({ error: message });

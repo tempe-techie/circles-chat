@@ -1,9 +1,5 @@
 import { MAX_MESSAGE_LENGTH } from './constants';
-import type {
-  ReactionBuildResponse,
-  ReactionConfirmResponse,
-  StoredMessage,
-} from './types';
+import type { ReactionBuildResponse, StoredMessage } from './types';
 
 export type MessagesPage = {
   messages: StoredMessage[];
@@ -116,31 +112,6 @@ export async function buildMessageReaction(
 
   if (!res.ok) {
     throw new Error(data.error ?? 'Failed to build reaction payment');
-  }
-
-  return data;
-}
-
-export async function confirmMessageReaction(
-  messageKey: string,
-  reactor: string,
-  paymentData: string,
-): Promise<ReactionConfirmResponse> {
-  const res = await fetch(
-    `/api/chat/messages/${encodeURIComponent(messageKey)}/reactions/confirm`,
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ reactor, paymentData }),
-    },
-  );
-
-  const data = (await res.json()) as ReactionConfirmResponse & {
-    error?: string;
-  };
-
-  if (!res.ok) {
-    throw new Error(data.error ?? 'Failed to confirm reaction');
   }
 
   return data;
