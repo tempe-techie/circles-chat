@@ -66,7 +66,7 @@ export function ConfirmDialog({
         <h3 id={titleId} className="text-base font-semibold text-slate-100">
           {title}
         </h3>
-        <p id={descriptionId} className="mt-2 text-sm text-slate-400">
+        <p id={descriptionId} className="mt-2 whitespace-pre-line text-sm text-slate-400">
           {description}
         </p>
         {error && (

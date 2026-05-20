@@ -22,8 +22,8 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   const [reactingKey, setReactingKey] = useState<string | null>(null);
   const [reactConfirmMessage, setReactConfirmMessage] =
     useState<ChatMessage | null>(null);
-  const [reactBalance, setReactBalance] = useState<number | null>(null);
-  const [reactBalanceLoading, setReactBalanceLoading] = useState(false);
+  const [crcBalance, setCrcBalance] = useState<number | null>(null);
+  const [crcBalanceLoading, setCrcBalanceLoading] = useState(false);
   const [reactModalError, setReactModalError] = useState<string | null>(null);
   const [moderatorAddresses, setModeratorAddresses] = useState<Set<string>>(
     () => new Set(),
@@ -67,6 +67,28 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     }
   }, [loadMessages, messages.length]);
 
+  const refreshCrcBalance = useCallback(
+    async (address: string, { silent = false }: { silent?: boolean } = {}) => {
+      if (!silent) setCrcBalanceLoading(true);
+      try {
+        const balance = await fetchUserCrcBalance(address);
+        setCrcBalance(balance);
+        return balance;
+      } catch (err) {
+        if (!silent) {
+          setCrcBalance(null);
+          setReactModalError(
+            err instanceof Error ? err.message : 'Could not load CRC balance',
+          );
+        }
+        return null;
+      } finally {
+        if (!silent) setCrcBalanceLoading(false);
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -101,6 +123,15 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   }, [wallet]);
 
   useEffect(() => {
+    if (!wallet || !inHost) {
+      setCrcBalance(null);
+      return;
+    }
+
+    void refreshCrcBalance(wallet, { silent: true });
+  }, [wallet, inHost, refreshCrcBalance]);
+
+  useEffect(() => {
     if (loading || messages.length === 0) return;
     if (skipScrollToBottomRef.current) {
       skipScrollToBottomRef.current = false;
@@ -108,39 +139,6 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     }
     requestAnimationFrame(() => scrollToBottom());
   }, [loading, messages, scrollToBottom]);
-
-  useEffect(() => {
-    if (!reactConfirmMessage || !wallet) {
-      setReactBalance(null);
-      setReactBalanceLoading(false);
-      setReactModalError(null);
-      return;
-    }
-
-    let cancelled = false;
-    setReactBalance(null);
-    setReactBalanceLoading(true);
-    setReactModalError(null);
-
-    fetchUserCrcBalance(wallet)
-      .then((balance) => {
-        if (!cancelled) setReactBalance(balance);
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          setReactModalError(
-            err instanceof Error ? err.message : 'Could not load CRC balance',
-          );
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setReactBalanceLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [reactConfirmMessage, wallet]);
 
   const loadMore = async () => {
     const cursor = nextCursorRef.current;
@@ -196,27 +194,49 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   const handleReact = (msg: ChatMessage) => {
     if (!wallet) return;
     if (msg.reactions?.reactedByMe) return;
+
     setReactModalError(null);
     setReactConfirmMessage(msg);
+
+    if (crcBalance !== null) {
+      void refreshCrcBalance(wallet, { silent: true });
+      return;
+    }
+
+    void refreshCrcBalance(wallet);
   };
 
   const canAffordReaction =
-    reactBalance !== null && reactBalance >= REACTION_CRC_COST;
+    crcBalance !== null && crcBalance >= REACTION_CRC_COST;
 
   const reactBalanceError =
-    !reactBalanceLoading && reactBalance !== null && !canAffordReaction
-      ? `Your balance is ${formatCrcBalance(reactBalance)} CRC. You need at least ${REACTION_CRC_COST} CRC to react.`
+    !crcBalanceLoading && crcBalance !== null && !canAffordReaction
+      ? `Your balance is ${formatCrcBalance(crcBalance)} CRC. You need at least ${REACTION_CRC_COST} CRC to react.`
       : null;
+
+  const reactModalDescription = reactConfirmMessage
+    ? [
+        `Liking this message includes a ${REACTION_CRC_COST} CRC tip to ${displayNameFor(reactConfirmMessage)}.`,
+        crcBalanceLoading
+          ? 'Checking your CRC balance…'
+          : crcBalance !== null
+            ? `Your balance: ${formatCrcBalance(crcBalance)} CRC`
+            : null,
+      ]
+        .filter(Boolean)
+        .join('\n\n')
+    : '';
 
   const confirmReact = async () => {
     const msg = reactConfirmMessage;
-    if (!wallet || !msg || reactBalanceLoading || !canAffordReaction) return;
+    if (!wallet || !msg || crcBalanceLoading || !canAffordReaction) return;
 
     setReactingKey(msg.key);
     setReactModalError(null);
     try {
       await reactToMessage(msg.key, wallet);
       setReactConfirmMessage(null);
+      void refreshCrcBalance(wallet, { silent: true });
       await refresh();
     } catch (err) {
       setReactModalError(
@@ -245,13 +265,9 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     <ConfirmDialog
       open={reactConfirmMessage !== null}
       title="Like message and tip the author?"
-      description={
-        reactConfirmMessage
-          ? `Liking this message includes a ${REACTION_CRC_COST} CRC tip to ${displayNameFor(reactConfirmMessage)}. Confirm below to proceed.`
-          : ''
-      }
+      description={reactModalDescription}
       confirmLabel={`Like & tip (${REACTION_CRC_COST} CRC)`}
-      loading={reactBalanceLoading}
+      loading={crcBalanceLoading}
       confirmDisabled={!canAffordReaction}
       error={reactModalError ?? reactBalanceError}
       confirming={reactConfirmMessage !== null && reactingKey === reactConfirmMessage.key}
