@@ -224,6 +224,7 @@ router.post('/messages/:key/reactions/build', async (req, res) => {
     const transactions = await buildReactionTransfer({
       messageAuthor: author,
       reactor: reactorAddress,
+      messageText: message.text,
     });
 
     return res.json({ status: 'ready', reaction, transactions });
