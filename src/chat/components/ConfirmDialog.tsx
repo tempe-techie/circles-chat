@@ -7,6 +7,9 @@ export function ConfirmDialog({
   confirmLabel = 'Confirm',
   cancelLabel = 'Cancel',
   confirming = false,
+  loading = false,
+  confirmDisabled = false,
+  error = null,
   onConfirm,
   onCancel,
 }: {
@@ -16,6 +19,9 @@ export function ConfirmDialog({
   confirmLabel?: string;
   cancelLabel?: string;
   confirming?: boolean;
+  loading?: boolean;
+  confirmDisabled?: boolean;
+  error?: string | null;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -63,6 +69,11 @@ export function ConfirmDialog({
         <p id={descriptionId} className="mt-2 text-sm text-slate-400">
           {description}
         </p>
+        {error && (
+          <p className="mt-3 rounded-lg bg-red-950/40 px-3 py-2 text-sm text-red-300 ring-1 ring-red-900/60">
+            {error}
+          </p>
+        )}
         <div className="mt-5 flex justify-end gap-2">
           <button
             ref={cancelRef}
@@ -76,10 +87,14 @@ export function ConfirmDialog({
           <button
             type="button"
             onClick={onConfirm}
-            disabled={confirming}
+            disabled={confirming || loading || confirmDisabled}
             className="rounded-lg bg-rose-600 px-3 py-2 text-sm font-medium text-white hover:bg-rose-500 disabled:opacity-50"
           >
-            {confirming ? 'Sending…' : confirmLabel}
+            {confirming
+              ? 'Sending…'
+              : loading
+                ? 'Checking balance…'
+                : confirmLabel}
           </button>
         </div>
       </div>

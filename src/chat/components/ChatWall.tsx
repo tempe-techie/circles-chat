@@ -5,6 +5,7 @@ import { fetchMessages, fetchModerators } from '../api';
 import { PAGE_SIZE, REACTION_CRC_COST } from '../constants';
 import { enrichMessages } from '../enrich';
 import type { ChatMessage } from '../types';
+import { fetchUserCrcBalance, formatCrcBalance } from '../../circles/balance';
 import { isMiniappMode } from '../../host/bridge';
 import { ConfirmDialog } from './ConfirmDialog';
 import { MessageComposer } from './MessageComposer';
@@ -21,6 +22,9 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   const [reactingKey, setReactingKey] = useState<string | null>(null);
   const [reactConfirmMessage, setReactConfirmMessage] =
     useState<ChatMessage | null>(null);
+  const [reactBalance, setReactBalance] = useState<number | null>(null);
+  const [reactBalanceLoading, setReactBalanceLoading] = useState(false);
+  const [reactModalError, setReactModalError] = useState<string | null>(null);
   const [moderatorAddresses, setModeratorAddresses] = useState<Set<string>>(
     () => new Set(),
   );
@@ -105,6 +109,39 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     requestAnimationFrame(() => scrollToBottom());
   }, [loading, messages, scrollToBottom]);
 
+  useEffect(() => {
+    if (!reactConfirmMessage || !wallet) {
+      setReactBalance(null);
+      setReactBalanceLoading(false);
+      setReactModalError(null);
+      return;
+    }
+
+    let cancelled = false;
+    setReactBalance(null);
+    setReactBalanceLoading(true);
+    setReactModalError(null);
+
+    fetchUserCrcBalance(wallet)
+      .then((balance) => {
+        if (!cancelled) setReactBalance(balance);
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          setReactModalError(
+            err instanceof Error ? err.message : 'Could not load CRC balance',
+          );
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setReactBalanceLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reactConfirmMessage, wallet]);
+
   const loadMore = async () => {
     const cursor = nextCursorRef.current;
     if (!cursor) return;
@@ -159,21 +196,32 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   const handleReact = (msg: ChatMessage) => {
     if (!wallet) return;
     if (msg.reactions?.reactedByMe) return;
+    setReactModalError(null);
     setReactConfirmMessage(msg);
   };
 
+  const canAffordReaction =
+    reactBalance !== null && reactBalance >= REACTION_CRC_COST;
+
+  const reactBalanceError =
+    !reactBalanceLoading && reactBalance !== null && !canAffordReaction
+      ? `Your balance is ${formatCrcBalance(reactBalance)} CRC. You need at least ${REACTION_CRC_COST} CRC to react.`
+      : null;
+
   const confirmReact = async () => {
     const msg = reactConfirmMessage;
-    if (!wallet || !msg) return;
+    if (!wallet || !msg || reactBalanceLoading || !canAffordReaction) return;
 
     setReactingKey(msg.key);
-    setError(null);
+    setReactModalError(null);
     try {
       await reactToMessage(msg.key, wallet);
       setReactConfirmMessage(null);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to react');
+      setReactModalError(
+        err instanceof Error ? err.message : 'Failed to react',
+      );
     } finally {
       setReactingKey(null);
     }
@@ -196,13 +244,16 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     <>
     <ConfirmDialog
       open={reactConfirmMessage !== null}
-      title="React to message?"
+      title="Like message and tip the author?"
       description={
         reactConfirmMessage
           ? `Liking this message includes a ${REACTION_CRC_COST} CRC tip to ${displayNameFor(reactConfirmMessage)}. Confirm below to proceed.`
           : ''
       }
-      confirmLabel={`React (${REACTION_CRC_COST} CRC)`}
+      confirmLabel={`Like & tip (${REACTION_CRC_COST} CRC)`}
+      loading={reactBalanceLoading}
+      confirmDisabled={!canAffordReaction}
+      error={reactModalError ?? reactBalanceError}
       confirming={reactConfirmMessage !== null && reactingKey === reactConfirmMessage.key}
       onConfirm={confirmReact}
       onCancel={() => {
