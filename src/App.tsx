@@ -1,15 +1,70 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { getAddress } from 'viem';
 import { fetchUserProfile, type UserProfile } from './circles/profile';
 import { ChatWall } from './chat/components/ChatWall';
 import { MessageAvatar } from './chat/components/MessageAvatar';
+import type { ChatChannel } from './chat/types';
+import { useUserGroups } from './hooks/useUserGroups';
 import { isMiniappMode, onWalletChange } from './host/bridge';
+
+function GroupChatRoute({
+  wallet,
+  groups,
+}: {
+  wallet: string | null;
+  groups: ReturnType<typeof useUserGroups>['groups'];
+}) {
+  const { groupAddress: groupAddressParam } = useParams<{
+    groupAddress: string;
+  }>();
+
+  let normalizedAddress: string | null = null;
+  try {
+    if (groupAddressParam) {
+      normalizedAddress = getAddress(groupAddressParam);
+    }
+  } catch {
+    normalizedAddress = null;
+  }
+
+  const matchedGroup = normalizedAddress
+    ? groups.find(
+        (g) => g.address.toLowerCase() === normalizedAddress!.toLowerCase(),
+      )
+    : null;
+
+  const channel: ChatChannel | null = useMemo(() => {
+    if (!normalizedAddress) return null;
+    if (matchedGroup) {
+      return {
+        kind: 'group',
+        address: matchedGroup.address,
+        channelName: matchedGroup.channelName,
+        name: matchedGroup.name,
+      };
+    }
+    return {
+      kind: 'group',
+      address: normalizedAddress,
+      channelName: '#group',
+      name: 'Group',
+    };
+  }, [normalizedAddress, matchedGroup]);
+
+  if (!channel) {
+    return <Navigate to="/" replace />;
+  }
+
+  return <ChatWall wallet={wallet} channel={channel} groups={groups} />;
+}
 
 export default function App() {
   const [wallet, setWallet] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
   const [host] = useState<boolean>(() => isMiniappMode());
+  const { groups } = useUserGroups(wallet);
 
   const loadProfile = useCallback(async (address: string) => {
     setProfileLoading(true);
@@ -42,6 +97,8 @@ export default function App() {
 
   const displayName = profile?.name ?? (wallet ? 'Circles user' : null);
 
+  const generalChannel: ChatChannel = { kind: 'general' };
+
   return (
     <main className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6">
       <div className="mx-auto max-w-3xl space-y-6">
@@ -72,7 +129,23 @@ export default function App() {
           </span>
         </header>
 
-        <ChatWall wallet={wallet} />
+        <Routes>
+          <Route
+            path="/"
+            element={
+              <ChatWall
+                wallet={wallet}
+                channel={generalChannel}
+                groups={groups}
+              />
+            }
+          />
+          <Route
+            path="/group/:groupAddress"
+            element={<GroupChatRoute wallet={wallet} groups={groups} />}
+          />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
       </div>
     </main>
   );

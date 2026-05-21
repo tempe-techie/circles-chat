@@ -1,5 +1,17 @@
 import type { Address } from 'viem';
+import type { UserGroup } from '../circles/groups';
 import type { UserProfile } from '../circles/profile';
+
+export type { UserGroup };
+
+export type ChatChannel =
+  | { kind: 'general' }
+  | {
+      kind: 'group';
+      address: string;
+      channelName: string;
+      name: string;
+    };
 
 export type MessageReactionsSummary = {
   count: number;
@@ -12,6 +24,8 @@ export type StoredMessage = {
   author: Address;
   text: string;
   timestamp: number;
+  groupAddress?: string;
+  groupName?: string;
   reactions?: MessageReactionsSummary;
 };
 

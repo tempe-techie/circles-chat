@@ -7,6 +7,11 @@ export type MessagesPage = {
   hasMore: boolean;
 };
 
+export type PostMessageGroup = {
+  address: string;
+  channelName: string;
+};
+
 export async function fetchModerators(): Promise<string[]> {
   const res = await fetch('/api/chat/moderators');
   const data = (await res.json()) as { moderators?: string[]; error?: string };
@@ -22,6 +27,7 @@ export async function fetchMessages(
   limit: number,
   cursor?: string,
   viewer?: string,
+  groupAddress?: string,
 ): Promise<MessagesPage> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) {
@@ -29,6 +35,9 @@ export async function fetchMessages(
   }
   if (viewer) {
     params.set('viewer', viewer);
+  }
+  if (groupAddress) {
+    params.set('groupAddress', groupAddress);
   }
 
   const res = await fetch(`/api/chat/messages?${params}`);
@@ -48,6 +57,7 @@ export async function fetchMessages(
 export async function postMessage(
   author: string,
   text: string,
+  group?: PostMessageGroup,
 ): Promise<StoredMessage> {
   const trimmed = text.trim();
   if (!trimmed) {
@@ -57,14 +67,21 @@ export async function postMessage(
     throw new Error(`Message must be at most ${MAX_MESSAGE_LENGTH} characters`);
   }
 
+  const body: Record<string, unknown> = {
+    author,
+    text: trimmed,
+    timestamp: Math.floor(Date.now() / 1000),
+  };
+
+  if (group) {
+    body.groupAddress = group.address;
+    body.groupName = group.channelName;
+  }
+
   const res = await fetch('/api/chat/messages', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      author,
-      text: trimmed,
-      timestamp: Math.floor(Date.now() / 1000),
-    }),
+    body: JSON.stringify(body),
   });
 
   const data = (await res.json()) as StoredMessage & { error?: string };

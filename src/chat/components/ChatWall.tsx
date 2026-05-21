@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { getAddress } from 'viem';
-import { deleteMainMessage, postMainMessage, reactToMessage } from '../actions';
+import {
+  deleteMainMessage,
+  postChannelMessage,
+  reactToMessage,
+} from '../actions';
 import { fetchMessages, fetchModerators } from '../api';
 import { PAGE_SIZE, POLL_INTERVAL_MS, REACTION_CRC_COST } from '../constants';
 import { enrichMessages } from '../enrich';
-import type { ChatMessage } from '../types';
+import type { ChatChannel, ChatMessage, UserGroup } from '../types';
+import { ChannelSelect } from './ChannelSelect';
 import { fetchMaxFlowCrc, fetchUserCrcBalance, formatCrcBalance } from '../../circles/balance';
 import { isMiniappMode } from '../../host/bridge';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -15,7 +20,32 @@ function isNearBottom(el: HTMLElement, threshold = 80): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight < threshold;
 }
 
-export function ChatWall({ wallet }: { wallet: string | null }) {
+export function ChatWall({
+  wallet,
+  channel,
+  groups,
+}: {
+  wallet: string | null;
+  channel: ChatChannel;
+  groups: UserGroup[];
+}) {
+  const groupAddress =
+    channel.kind === 'group' ? channel.address : undefined;
+
+  const isMemberOfChannel =
+    channel.kind === 'general' ||
+    (wallet != null &&
+      groups.some(
+        (g) => g.address.toLowerCase() === channel.address.toLowerCase(),
+      ));
+
+  const channelLabel =
+    channel.kind === 'general' ? '#general' : channel.channelName;
+
+  const channelSubtitle =
+    channel.kind === 'general'
+      ? 'Circles community chat'
+      : channel.name;
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -47,11 +77,16 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
   }, []);
 
   const inHost = isMiniappMode();
-  const canPost = Boolean(wallet && inHost);
+  const canPost = Boolean(wallet && inHost && isMemberOfChannel);
 
   const loadMessages = useCallback(
     async (limit: number, cursor?: string, append = false) => {
-      const page = await fetchMessages(limit, cursor, wallet ?? undefined);
+      const page = await fetchMessages(
+        limit,
+        cursor,
+        wallet ?? undefined,
+        groupAddress,
+      );
       const enriched = await enrichMessages(page.messages);
       nextCursorRef.current = page.nextCursor;
       setHasMore(page.hasMore);
@@ -61,7 +96,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
         setMessages(enriched);
       }
     },
-    [wallet],
+    [wallet, groupAddress],
   );
 
   const refresh = useCallback(
@@ -109,12 +144,20 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
 
   useEffect(() => {
     let cancelled = false;
+    setMessages([]);
+    nextCursorRef.current = null;
+    setHasMore(false);
     (async () => {
       setLoading(true);
       setError(null);
       try {
         const [page, moderators] = await Promise.all([
-          fetchMessages(PAGE_SIZE, undefined, wallet ?? undefined),
+          fetchMessages(
+            PAGE_SIZE,
+            undefined,
+            wallet ?? undefined,
+            groupAddress,
+          ),
           fetchModerators(),
         ]);
         if (cancelled) return;
@@ -138,7 +181,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     return () => {
       cancelled = true;
     };
-  }, [wallet]);
+  }, [wallet, groupAddress]);
 
   useEffect(() => {
     messagesLengthRef.current = messages.length;
@@ -219,7 +262,7 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     setSubmitting(true);
     setError(null);
     try {
-      await postMainMessage(wallet, text);
+      await postChannelMessage(wallet, text, channel);
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to post message');
@@ -365,10 +408,8 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
     />
     <section className="flex flex-col min-h-[420px] rounded-xl bg-slate-900/50 ring-1 ring-slate-800 overflow-hidden">
       <header className="shrink-0 border-b border-slate-800 px-4 py-3">
-        <h2 className="text-sm font-semibold text-slate-200"># general</h2>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Circles community chat
-        </p>
+        <ChannelSelect channel={channel} groups={groups} />
+        <p className="text-xs text-slate-500 mt-0.5">{channelSubtitle}</p>
       </header>
 
       <div
@@ -387,6 +428,13 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
               Circles Playground
             </a>{' '}
             to post messages.
+          </p>
+        )}
+
+        {channel.kind === 'group' && wallet && !isMemberOfChannel && (
+          <p className="mb-3 text-xs text-amber-400/90 bg-amber-950/30 rounded-lg px-3 py-2">
+            You are not a member of this group. You can read messages but cannot
+            post.
           </p>
         )}
 
@@ -442,10 +490,12 @@ export function ChatWall({ wallet }: { wallet: string | null }) {
         <MessageComposer
           placeholder={
             canPost
-              ? 'Message #general'
-              : wallet
-                ? 'Connect via Circles host to post'
-                : 'Connect wallet to post'
+              ? `Message ${channelLabel}`
+              : wallet && channel.kind === 'group' && !isMemberOfChannel
+                ? 'Not a member of this group'
+                : wallet
+                  ? 'Connect via Circles host to post'
+                  : 'Connect wallet to post'
           }
           disabled={!canPost}
           submitting={submitting}

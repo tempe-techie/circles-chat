@@ -7,6 +7,14 @@ import {
   listMessages,
   saveMessage,
 } from '../datastore/messages.js';
+import {
+  authorFromGroupKey,
+  deleteGroupMessage,
+  getGroupMessage,
+  isGroupMessageKey,
+  listGroupMessages,
+  saveGroupMessage,
+} from '../datastore/messages-groups.js';
 import { getModeratorAddresses, isModerator } from '../datastore/moderators.js';
 import {
   getReaction,
@@ -20,9 +28,31 @@ const router = Router();
 
 const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
+const CHANNEL_NAME_PATTERN = /^#[a-z0-9-]+$/;
 
 function deleteSignPayload(messageKey) {
   return `circles-chat:delete:${messageKey}`;
+}
+
+async function getMessageByKey(key) {
+  if (isGroupMessageKey(key)) {
+    return getGroupMessage(key);
+  }
+  return getMessage(key);
+}
+
+async function deleteMessageByKey(key) {
+  if (isGroupMessageKey(key)) {
+    return deleteGroupMessage(key);
+  }
+  return deleteMessage(key);
+}
+
+function authorFromMessageKey(key) {
+  if (isGroupMessageKey(key)) {
+    return authorFromGroupKey(key);
+  }
+  return authorFromKey(key);
 }
 
 router.get('/moderators', (_req, res) => {
@@ -51,10 +81,34 @@ router.get('/messages', async (req, res) => {
         ? req.query.viewer.trim()
         : undefined;
 
-    const { messages, nextCursor, hasMore } = await listMessages({
-      limit,
-      cursor,
-    });
+    const groupAddressRaw =
+      typeof req.query.groupAddress === 'string' && req.query.groupAddress.trim()
+        ? req.query.groupAddress.trim()
+        : undefined;
+
+    let messages;
+    let nextCursor;
+    let hasMore;
+
+    if (groupAddressRaw) {
+      if (!isAddress(groupAddressRaw)) {
+        return res.status(400).json({ error: 'Invalid groupAddress' });
+      }
+
+      const result = await listGroupMessages({
+        groupAddress: getAddress(groupAddressRaw),
+        limit,
+        cursor,
+      });
+      messages = result.messages;
+      nextCursor = result.nextCursor;
+      hasMore = result.hasMore;
+    } else {
+      const result = await listMessages({ limit, cursor });
+      messages = result.messages;
+      nextCursor = result.nextCursor;
+      hasMore = result.hasMore;
+    }
 
     const reactionSummaries = await listReactionsForMessages(
       messages.map((m) => m.key),
@@ -85,7 +139,7 @@ router.get('/messages', async (req, res) => {
 
 router.post('/messages', async (req, res) => {
   try {
-    const { author, text, timestamp } = req.body ?? {};
+    const { author, text, timestamp, groupAddress, groupName } = req.body ?? {};
 
     if (!author || typeof author !== 'string' || !isAddress(author)) {
       return res.status(400).json({ error: 'Invalid author address' });
@@ -104,6 +158,40 @@ router.post('/messages', async (req, res) => {
 
     if (!Number.isFinite(ts)) {
       return res.status(400).json({ error: 'timestamp must be a number' });
+    }
+
+    const hasGroupAddress =
+      groupAddress != null && String(groupAddress).trim() !== '';
+    const hasGroupName =
+      groupName != null && String(groupName).trim() !== '';
+
+    if (hasGroupAddress !== hasGroupName) {
+      return res
+        .status(400)
+        .json({ error: 'groupAddress and groupName must both be provided' });
+    }
+
+    if (hasGroupAddress) {
+      if (!isAddress(groupAddress)) {
+        return res.status(400).json({ error: 'Invalid groupAddress' });
+      }
+
+      const trimmedName = String(groupName).trim();
+      if (!CHANNEL_NAME_PATTERN.test(trimmedName)) {
+        return res.status(400).json({
+          error: 'groupName must be a channel slug like #circles-backers',
+        });
+      }
+
+      const message = await saveGroupMessage({
+        author: getAddress(author),
+        text,
+        timestamp: ts,
+        groupAddress: getAddress(groupAddress),
+        groupName: trimmedName,
+      });
+
+      return res.json(message);
     }
 
     const message = await saveMessage({
@@ -134,12 +222,12 @@ router.delete('/messages/:key', async (req, res) => {
       return res.status(400).json({ error: 'signature is required' });
     }
 
-    const message = await getMessage(key);
+    const message = await getMessageByKey(key);
     if (!message) {
       return res.status(404).json({ error: 'Message not found' });
     }
 
-    const authorFromKeyPart = authorFromKey(key);
+    const authorFromKeyPart = authorFromMessageKey(key);
     if (!authorFromKeyPart || getAddress(message.author) !== authorFromKeyPart) {
       return res.status(403).json({ error: 'Invalid message key' });
     }
@@ -173,7 +261,7 @@ router.delete('/messages/:key', async (req, res) => {
       return res.status(403).json({ error: 'Not authorized to delete this message' });
     }
 
-    await deleteMessage(key);
+    await deleteMessageByKey(key);
     return res.json({ ok: true });
   } catch (err) {
     console.error('Chat delete error:', err);
@@ -196,7 +284,7 @@ router.post('/messages/:key/reactions/build', async (req, res) => {
       return res.status(400).json({ error: 'Invalid reactor address' });
     }
 
-    const message = await getMessage(key);
+    const message = await getMessageByKey(key);
     if (!message) {
       return res.status(404).json({ error: 'Message not found' });
     }

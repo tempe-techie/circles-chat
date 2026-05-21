@@ -1,7 +1,13 @@
 import { getAddress } from 'viem';
 import { sendTransactions, signMessage } from '../host/bridge';
-import { buildMessageReaction, deleteMessage, postMessage } from './api';
+import {
+  buildMessageReaction,
+  deleteMessage,
+  postMessage,
+  type PostMessageGroup,
+} from './api';
 import { DELETE_SIGN_PREFIX } from './constants';
+import type { ChatChannel } from './types';
 
 function toHexValue(value: string | bigint | undefined): string {
   if (value == null || value === '' || value === '0') return '0x0';
@@ -19,6 +25,22 @@ function formatTxForHost(tx: {
     data: tx.data ?? '0x',
     value: toHexValue(tx.value),
   };
+}
+
+function groupFromChannel(channel: ChatChannel): PostMessageGroup | undefined {
+  if (channel.kind !== 'group') return undefined;
+  return {
+    address: channel.address,
+    channelName: channel.channelName,
+  };
+}
+
+export async function postChannelMessage(
+  author: string,
+  text: string,
+  channel: ChatChannel,
+): Promise<void> {
+  await postMessage(author, text, groupFromChannel(channel));
 }
 
 export async function postMainMessage(

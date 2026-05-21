@@ -3,3 +3,8 @@ indexes:
     properties:
       - name: __key__
         direction: desc
+  - kind: MessagesGroups
+    properties:
+      - name: groupAddress
+      - name: __key__
+        direction: desc
