@@ -6,7 +6,10 @@ import { ChatWall } from './chat/components/ChatWall';
 import { MessageAvatar } from './chat/components/MessageAvatar';
 import type { ChatChannel } from './chat/types';
 import { useUserGroups } from './hooks/useUserGroups';
-import { isMiniappMode, onWalletChange } from './host/bridge';
+import { onWalletChange } from './host/bridge';
+
+const SHARE_PLAYGROUND_URL =
+  'https://circles.gnosis.io/playground?url=https%3A%2F%2Fapp.circles-chat.org';
 
 function GroupChatRoute({
   wallet,
@@ -63,7 +66,7 @@ export default function App() {
   const [wallet, setWallet] = useState<string | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [profileLoading, setProfileLoading] = useState(false);
-  const [host] = useState<boolean>(() => isMiniappMode());
+  const [shareCopied, setShareCopied] = useState(false);
   const { groups } = useUserGroups(wallet);
 
   const loadProfile = useCallback(async (address: string) => {
@@ -95,7 +98,21 @@ export default function App() {
     return () => {};
   }, [loadProfile]);
 
-  const displayName = profile?.name ?? (wallet ? 'Circles user' : null);
+  const subtitle = !wallet
+    ? 'Connect your wallet in the Circles Playground'
+    : profileLoading
+      ? 'Loading your profile…'
+      : `Hello, ${profile?.name ?? 'Circles user'}!`;
+
+  const copyShareLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(SHARE_PLAYGROUND_URL);
+      setShareCopied(true);
+      window.setTimeout(() => setShareCopied(false), 3000);
+    } catch {
+      setShareCopied(false);
+    }
+  }, []);
 
   const generalChannel: ChatChannel = { kind: 'general' };
 
@@ -111,22 +128,30 @@ export default function App() {
             />
           )}
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold truncate">
-              {profileLoading
-                ? 'Loading…'
-                : displayName
-                  ? `Hello, ${displayName}`
-                  : 'Circles Chat'}
-            </h1>
-            <p className="text-xs text-slate-500 truncate">
-              {wallet
-                ? wallet
-                : 'Connect your wallet in the Circles host'}
-            </p>
+            <h1 className="text-xl font-bold truncate">Circles Chat</h1>
+            <p className="text-xs text-slate-500 truncate">{subtitle}</p>
           </div>
-          <span className="shrink-0 text-[10px] uppercase tracking-wide text-slate-600 font-mono">
-            {host ? 'host' : 'standalone'}
-          </span>
+          <div className="relative shrink-0">
+            <button
+              type="button"
+              onClick={() => void copyShareLink()}
+              className="rounded-lg p-2 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+              aria-label="Copy share link"
+              title="Copy share link"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-share-fill" viewBox="0 0 16 16">
+                <path d="M11 2.5a2.5 2.5 0 1 1 .603 1.628l-6.718 3.12a2.5 2.5 0 0 1 0 1.504l6.718 3.12a2.5 2.5 0 1 1-.488.876l-6.718-3.12a2.5 2.5 0 1 1 0-3.256l6.718-3.12A2.5 2.5 0 0 1 11 2.5"/>
+              </svg>
+            </button>
+            {shareCopied && (
+              <p
+                role="status"
+                className="absolute right-0 top-full z-10 mt-1 w-max max-w-[14rem] rounded-md bg-slate-800 px-2 py-1 text-[11px] text-slate-200 shadow-lg ring-1 ring-slate-700"
+              >
+                Share link copied to clipboard
+              </p>
+            )}
+          </div>
         </header>
 
         <Routes>
