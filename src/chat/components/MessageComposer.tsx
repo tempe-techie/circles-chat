@@ -31,7 +31,7 @@ export function MessageComposer({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-2">
-      <div className="flex gap-2">
+      <div className="flex items-stretch gap-2">
         <textarea
           value={text}
           onChange={(e) => setText(e.target.value)}
@@ -44,7 +44,7 @@ export function MessageComposer({
         <button
           type="submit"
           disabled={disabled || submitting || !text.trim()}
-          className="shrink-0 self-end rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors"
+          className="flex shrink-0 items-center justify-center rounded-lg bg-emerald-600 px-4 text-sm font-medium text-white hover:bg-emerald-500 disabled:opacity-50 transition-colors"
         >
           {submitting ? '…' : 'Send'}
         </button>
