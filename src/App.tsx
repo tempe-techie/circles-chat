@@ -109,7 +109,8 @@ export default function App() {
       await navigator.clipboard.writeText(SHARE_PLAYGROUND_URL);
       setShareCopied(true);
       window.setTimeout(() => setShareCopied(false), 3000);
-    } catch {
+    } catch (err) {
+      console.error('Failed to copy share link to clipboard:', err);
       setShareCopied(false);
     }
   }, []);
