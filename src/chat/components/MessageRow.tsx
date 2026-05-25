@@ -1,5 +1,6 @@
 import { getAddress } from 'viem';
 import { formatRelativeTime, shortenAddress } from '../format';
+import { LinkifiedText } from '../linkify';
 import type { ChatMessage } from '../types';
 import { MessageAvatar } from './MessageAvatar';
 import { MessageReactions } from './MessageReactions';
@@ -57,7 +58,7 @@ export function MessageRow({
           )}
         </div>
         <p className="mt-1 text-sm whitespace-pre-wrap break-words text-slate-200">
-          {message.text}
+          <LinkifiedText text={message.text} />
         </p>
         {onReact && (
           <MessageReactions
