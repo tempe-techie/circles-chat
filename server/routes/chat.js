@@ -23,6 +23,7 @@ import {
 } from '../datastore/reactions.js';
 import { recoverSignerAddress, verifyAuthorSignature } from '../utils/chain.js';
 import { buildReactionTransfer } from '../utils/reaction-payment.js';
+import { buildTipTransfer } from '../utils/tip-payment.js';
 
 const router = Router();
 
@@ -318,6 +319,40 @@ router.post('/messages/:key/reactions/build', async (req, res) => {
     return res.json({ status: 'ready', reaction, transactions });
   } catch (err) {
     console.error('Reaction build error:', err);
+    const message =
+      err instanceof Error ? err.message : 'Internal server error';
+    return res.status(500).json({ error: message });
+  }
+});
+
+router.post('/tips/build', async (req, res) => {
+  try {
+    const { sender, recipient, amount } = req.body ?? {};
+
+    if (!sender || typeof sender !== 'string' || !isAddress(sender)) {
+      return res.status(400).json({ error: 'Invalid sender address' });
+    }
+
+    if (!recipient || typeof recipient !== 'string' || !isAddress(recipient)) {
+      return res.status(400).json({ error: 'Invalid recipient address' });
+    }
+
+    const senderAddress = getAddress(sender);
+    const recipientAddress = getAddress(recipient);
+
+    if (senderAddress === recipientAddress) {
+      return res.status(400).json({ error: 'You cannot tip yourself' });
+    }
+
+    const transactions = await buildTipTransfer({
+      sender: senderAddress,
+      recipient: recipientAddress,
+      amount,
+    });
+
+    return res.json({ status: 'ready', transactions });
+  } catch (err) {
+    console.error('Tip build error:', err);
     const message =
       err instanceof Error ? err.message : 'Internal server error';
     return res.status(500).json({ error: message });

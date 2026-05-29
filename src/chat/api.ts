@@ -1,5 +1,9 @@
 import { MAX_MESSAGE_LENGTH } from './constants';
-import type { ReactionBuildResponse, StoredMessage } from './types';
+import type {
+  ReactionBuildResponse,
+  StoredMessage,
+  TipBuildResponse,
+} from './types';
 
 export type MessagesPage = {
   messages: StoredMessage[];
@@ -129,6 +133,28 @@ export async function buildMessageReaction(
 
   if (!res.ok) {
     throw new Error(data.error ?? 'Failed to build reaction payment');
+  }
+
+  return data;
+}
+
+export async function buildTip(
+  sender: string,
+  recipient: string,
+  amount: number,
+): Promise<TipBuildResponse> {
+  const res = await fetch('/api/chat/tips/build', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sender, recipient, amount }),
+  });
+
+  const data = (await res.json()) as TipBuildResponse & {
+    error?: string;
+  };
+
+  if (!res.ok) {
+    throw new Error(data.error ?? 'Failed to build tip payment');
   }
 
   return data;

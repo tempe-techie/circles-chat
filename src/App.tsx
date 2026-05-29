@@ -4,6 +4,7 @@ import { getAddress } from 'viem';
 import { fetchUserProfile, type UserProfile } from './circles/profile';
 import { ChatWall } from './chat/components/ChatWall';
 import { MessageAvatar } from './chat/components/MessageAvatar';
+import { ProfilePage } from './profile/ProfilePage';
 import type { ChatChannel } from './chat/types';
 import { useUserGroups } from './hooks/useUserGroups';
 import { onWalletChange } from './host/bridge';
@@ -169,6 +170,10 @@ export default function App() {
           <Route
             path="/group/:groupAddress"
             element={<GroupChatRoute wallet={wallet} groups={groups} />}
+          />
+          <Route
+            path="/user/:address"
+            element={<ProfilePage wallet={wallet} />}
           />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

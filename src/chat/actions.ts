@@ -2,6 +2,7 @@ import { getAddress } from 'viem';
 import { sendTransactions, signMessage } from '../host/bridge';
 import {
   buildMessageReaction,
+  buildTip,
   deleteMessage,
   postMessage,
   type PostMessageGroup,
@@ -64,6 +65,22 @@ export async function reactToMessage(
   const { transactions } = await buildMessageReaction(
     messageKey,
     reactorAddress,
+  );
+
+  await sendTransactions(transactions.map(formatTxForHost));
+}
+
+export async function tipUser(
+  sender: string,
+  recipient: string,
+  amount: number,
+): Promise<void> {
+  const senderAddress = getAddress(sender);
+  const recipientAddress = getAddress(recipient);
+  const { transactions } = await buildTip(
+    senderAddress,
+    recipientAddress,
+    amount,
   );
 
   await sendTransactions(transactions.map(formatTxForHost));

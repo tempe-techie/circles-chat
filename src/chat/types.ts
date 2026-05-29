@@ -33,6 +33,15 @@ export type ChatMessage = StoredMessage & {
   profile: UserProfile | null;
 };
 
+export type TipBuildResponse = {
+  status: 'ready';
+  transactions: Array<{
+    to: string;
+    data?: string;
+    value?: string;
+  }>;
+};
+
 export type ReactionBuildResponse = {
   status: 'ready';
   reaction: {

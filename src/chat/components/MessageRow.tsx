@@ -1,9 +1,18 @@
+import { Link } from 'react-router-dom';
 import { getAddress } from 'viem';
 import { formatRelativeTime, shortenAddress } from '../format';
 import { MessageContent } from '../messageContent';
 import type { ChatMessage } from '../types';
 import { MessageAvatar } from './MessageAvatar';
 import { MessageReactions } from './MessageReactions';
+
+function profilePathFor(author: string): string {
+  try {
+    return `/user/${getAddress(author)}`;
+  } catch {
+    return `/user/${author}`;
+  }
+}
 
 export function displayNameFor(message: ChatMessage): string {
   if (message.profile?.name) return message.profile.name;
@@ -31,18 +40,25 @@ export function MessageRow({
   reacting?: boolean;
   onReact?: () => void;
 }) {
+  const profilePath = profilePathFor(message.author);
+
   return (
     <div className="flex gap-3 py-3">
-      <MessageAvatar
-        profile={message.profile}
-        address={message.author}
-        size="md"
-      />
+      <Link to={profilePath} className="shrink-0">
+        <MessageAvatar
+          profile={message.profile}
+          address={message.author}
+          size="md"
+        />
+      </Link>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
-          <span className="font-semibold text-slate-100">
+          <Link
+            to={profilePath}
+            className="font-semibold text-slate-100 hover:underline"
+          >
             {displayNameFor(message)}
-          </span>
+          </Link>
           <span className="text-xs text-slate-500">
             {formatRelativeTime(message.timestamp)}
           </span>
