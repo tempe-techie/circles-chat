@@ -5,6 +5,7 @@ const config = circlesConfig[100];
 const rpcUrl = config.circlesRpcUrl.replace(/\/$/, '');
 
 export const IGNORED_GROUP_ADDRESSES = new Set([
+  // Important: must be lowercase!
   '0x7cadb2e92295f3e4fa65d3d4e7265e2e05d7a783',
   '0xeb44aff8ec210df433803a97714d527055cc0099',
   '0x24c9ba1fb88533b0cd2aea37dad75b809eecf2c0',

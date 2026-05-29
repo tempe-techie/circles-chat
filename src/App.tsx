@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Navigate, Route, Routes, useParams } from 'react-router-dom';
+import { Link, Navigate, Route, Routes, useParams } from 'react-router-dom';
 import { getAddress } from 'viem';
 import { fetchUserProfile, type UserProfile } from './circles/profile';
 import { ChatWall } from './chat/components/ChatWall';
@@ -123,11 +123,18 @@ export default function App() {
       <div className="mx-auto max-w-3xl space-y-6">
         <header className="flex items-center gap-3 px-1">
           {wallet && (
-            <MessageAvatar
-              profile={profile}
-              address={wallet}
-              size="md"
-            />
+            <Link
+              to={`/user/${wallet}`}
+              className="shrink-0 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-400"
+              aria-label="View your profile"
+              title="View your profile"
+            >
+              <MessageAvatar
+                profile={profile}
+                address={wallet}
+                size="md"
+              />
+            </Link>
           )}
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold truncate">Circles Chat</h1>
