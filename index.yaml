@@ -8,3 +8,8 @@ indexes:
       - name: groupAddress
       - name: __key__
         direction: desc
+  - kind: MessagesProfiles
+    properties:
+      - name: profileAddress
+      - name: __key__
+        direction: desc

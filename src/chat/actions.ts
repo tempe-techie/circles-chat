@@ -5,7 +5,7 @@ import {
   buildTip,
   deleteMessage,
   postMessage,
-  type PostMessageGroup,
+  type PostMessageTarget,
 } from './api';
 import { DELETE_SIGN_PREFIX } from './constants';
 import type { ChatChannel } from './types';
@@ -28,12 +28,24 @@ function formatTxForHost(tx: {
   };
 }
 
-function groupFromChannel(channel: ChatChannel): PostMessageGroup | undefined {
-  if (channel.kind !== 'group') return undefined;
-  return {
-    address: channel.address,
-    channelName: channel.channelName,
-  };
+function targetFromChannel(
+  channel: ChatChannel,
+): PostMessageTarget | undefined {
+  if (channel.kind === 'group') {
+    return {
+      kind: 'group',
+      address: channel.address,
+      channelName: channel.channelName,
+    };
+  }
+  if (channel.kind === 'profile') {
+    return {
+      kind: 'profile',
+      address: channel.address,
+      name: channel.name,
+    };
+  }
+  return undefined;
 }
 
 export async function postChannelMessage(
@@ -41,7 +53,7 @@ export async function postChannelMessage(
   text: string,
   channel: ChatChannel,
 ): Promise<void> {
-  await postMessage(author, text, groupFromChannel(channel));
+  await postMessage(author, text, targetFromChannel(channel));
 }
 
 export async function postMainMessage(

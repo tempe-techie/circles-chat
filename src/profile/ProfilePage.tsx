@@ -8,7 +8,9 @@ import {
 } from '../circles/balance';
 import { fetchUserProfile, type UserProfile } from '../circles/profile';
 import { tipUser } from '../chat/actions';
+import { ChatWall } from '../chat/components/ChatWall';
 import { MessageAvatar } from '../chat/components/MessageAvatar';
+import type { ChatChannel } from '../chat/types';
 import {
   DEFAULT_TIP_CRC,
   TIP_MAX_CRC,
@@ -268,6 +270,11 @@ export function ProfilePage({ wallet }: { wallet: string | null }) {
   }
 
   const name = profileNameFor(profile, normalizedAddress);
+  const profileChannel: ChatChannel = {
+    kind: 'profile',
+    address: normalizedAddress,
+    name,
+  };
   const isSelf =
     wallet != null &&
     getAddress(wallet).toLowerCase() === normalizedAddress.toLowerCase();
@@ -384,6 +391,8 @@ export function ProfilePage({ wallet }: { wallet: string | null }) {
           )}
         </div>
       </section>
+
+      <ChatWall wallet={wallet} channel={profileChannel} />
     </>
   );
 }

@@ -13,7 +13,11 @@ export function ChannelSelect({ channel, groups }: ChannelSelectProps) {
   const containerRef = useRef<HTMLDivElement>(null);
 
   const currentLabel =
-    channel.kind === 'general' ? '#general' : channel.channelName;
+    channel.kind === 'general'
+      ? '#general'
+      : channel.kind === 'group'
+        ? channel.channelName
+        : channel.name;
 
   useEffect(() => {
     if (!open) return;

@@ -16,6 +16,10 @@ export type PostMessageGroup = {
   channelName: string;
 };
 
+export type PostMessageTarget =
+  | { kind: 'group'; address: string; channelName: string }
+  | { kind: 'profile'; address: string; name: string };
+
 export async function fetchModerators(): Promise<string[]> {
   const res = await fetch('/api/chat/moderators');
   const data = (await res.json()) as { moderators?: string[]; error?: string };
@@ -32,6 +36,7 @@ export async function fetchMessages(
   cursor?: string,
   viewer?: string,
   groupAddress?: string,
+  profileAddress?: string,
 ): Promise<MessagesPage> {
   const params = new URLSearchParams({ limit: String(limit) });
   if (cursor) {
@@ -42,6 +47,9 @@ export async function fetchMessages(
   }
   if (groupAddress) {
     params.set('groupAddress', groupAddress);
+  }
+  if (profileAddress) {
+    params.set('profileAddress', profileAddress);
   }
 
   const res = await fetch(`/api/chat/messages?${params}`);
@@ -61,7 +69,7 @@ export async function fetchMessages(
 export async function postMessage(
   author: string,
   text: string,
-  group?: PostMessageGroup,
+  target?: PostMessageTarget,
 ): Promise<StoredMessage> {
   const trimmed = text.trim();
   if (!trimmed) {
@@ -77,9 +85,12 @@ export async function postMessage(
     timestamp: Math.floor(Date.now() / 1000),
   };
 
-  if (group) {
-    body.groupAddress = group.address;
-    body.groupName = group.channelName;
+  if (target?.kind === 'group') {
+    body.groupAddress = target.address;
+    body.groupName = target.channelName;
+  } else if (target?.kind === 'profile') {
+    body.profileAddress = target.address;
+    body.profileName = target.name;
   }
 
   const res = await fetch('/api/chat/messages', {

@@ -24,24 +24,32 @@ function isNearBottom(el: HTMLElement, threshold = 80): boolean {
 export function ChatWall({
   wallet,
   channel,
-  groups,
+  groups = [],
 }: {
   wallet: string | null;
   channel: ChatChannel;
-  groups: UserGroup[];
+  groups?: UserGroup[];
 }) {
   const groupAddress =
     channel.kind === 'group' ? channel.address : undefined;
 
+  const profileAddress =
+    channel.kind === 'profile' ? channel.address : undefined;
+
   const isMemberOfChannel =
     channel.kind === 'general' ||
+    channel.kind === 'profile' ||
     (wallet != null &&
       groups.some(
         (g) => g.address.toLowerCase() === channel.address.toLowerCase(),
       ));
 
   const channelLabel =
-    channel.kind === 'general' ? '#general' : channel.channelName;
+    channel.kind === 'general'
+      ? '#general'
+      : channel.kind === 'profile'
+        ? channel.name
+        : channel.channelName;
 
   const channelSubtitle =
     channel.kind === 'general'
@@ -87,6 +95,7 @@ export function ChatWall({
         cursor,
         wallet ?? undefined,
         groupAddress,
+        profileAddress,
       );
       const enriched = await enrichMessages(page.messages);
       nextCursorRef.current = page.nextCursor;
@@ -97,7 +106,7 @@ export function ChatWall({
         setMessages(enriched);
       }
     },
-    [wallet, groupAddress],
+    [wallet, groupAddress, profileAddress],
   );
 
   const refresh = useCallback(
@@ -158,6 +167,7 @@ export function ChatWall({
             undefined,
             wallet ?? undefined,
             groupAddress,
+            profileAddress,
           ),
           fetchModerators(),
         ]);
@@ -182,7 +192,7 @@ export function ChatWall({
     return () => {
       cancelled = true;
     };
-  }, [wallet, groupAddress]);
+  }, [wallet, groupAddress, profileAddress]);
 
   useEffect(() => {
     messagesLengthRef.current = messages.length;
@@ -409,20 +419,37 @@ export function ChatWall({
     />
     <section className="flex flex-col min-h-[420px] rounded-xl bg-slate-900/50 ring-1 ring-slate-800 overflow-hidden">
       <header className="shrink-0 border-b border-slate-800 px-4 py-3">
-        <ChannelSelect channel={channel} groups={groups} />
-        <p className="text-xs text-slate-500 mt-0.5">
-          {channel.kind === 'general' ? (
-            channelSubtitle
-          ) : (
-            <>
-              {channel.name}{' '}
+        {channel.kind === 'profile' ? (
+          <>
+            <h2 className="text-sm font-semibold text-slate-200">
+              {channel.name}
+            </h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Profile wall{' '}
               <GroupAddressLink
                 address={channel.address}
                 className="text-slate-500 hover:text-slate-300"
               />
-            </>
-          )}
-        </p>
+            </p>
+          </>
+        ) : (
+          <>
+            <ChannelSelect channel={channel} groups={groups} />
+            <p className="text-xs text-slate-500 mt-0.5">
+              {channel.kind === 'general' ? (
+                channelSubtitle
+              ) : (
+                <>
+                  {channel.name}{' '}
+                  <GroupAddressLink
+                    address={channel.address}
+                    className="text-slate-500 hover:text-slate-300"
+                  />
+                </>
+              )}
+            </p>
+          </>
+        )}
       </header>
 
       <div

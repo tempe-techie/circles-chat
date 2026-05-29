@@ -11,6 +11,11 @@ export type ChatChannel =
       address: string;
       channelName: string;
       name: string;
+    }
+  | {
+      kind: 'profile';
+      address: string;
+      name: string;
     };
 
 export type MessageReactionsSummary = {
@@ -26,6 +31,8 @@ export type StoredMessage = {
   timestamp: number;
   groupAddress?: string;
   groupName?: string;
+  profileAddress?: string;
+  profileName?: string;
   reactions?: MessageReactionsSummary;
 };
 
