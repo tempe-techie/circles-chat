@@ -10,6 +10,7 @@ import { PAGE_SIZE, POLL_INTERVAL_MS, REACTION_CRC_COST } from '../constants';
 import { enrichMessages } from '../enrich';
 import type { ChatChannel, ChatMessage, UserGroup } from '../types';
 import { ChannelSelect } from './ChannelSelect';
+import { GroupAddressLink } from './GroupAddressLink';
 import { fetchMaxFlowCrc, fetchUserCrcBalance, formatCrcBalance } from '../../circles/balance';
 import { isMiniappMode } from '../../host/bridge';
 import { ConfirmDialog } from './ConfirmDialog';
@@ -409,7 +410,19 @@ export function ChatWall({
     <section className="flex flex-col min-h-[420px] rounded-xl bg-slate-900/50 ring-1 ring-slate-800 overflow-hidden">
       <header className="shrink-0 border-b border-slate-800 px-4 py-3">
         <ChannelSelect channel={channel} groups={groups} />
-        <p className="text-xs text-slate-500 mt-0.5">{channelSubtitle}</p>
+        <p className="text-xs text-slate-500 mt-0.5">
+          {channel.kind === 'general' ? (
+            channelSubtitle
+          ) : (
+            <>
+              {channel.name}{' '}
+              <GroupAddressLink
+                address={channel.address}
+                className="text-slate-500 hover:text-slate-300"
+              />
+            </>
+          )}
+        </p>
       </header>
 
       <div

@@ -9,6 +9,7 @@ export const IGNORED_GROUP_ADDRESSES = new Set([
   '0xeb44aff8ec210df433803a97714d527055cc0099',
   '0x24c9ba1fb88533b0cd2aea37dad75b809eecf2c0',
   '0xb629a1e86f3efada0f87c83494da8cc34c3f84ef',
+  '0x93ed5a96347927ff6ff6b790f8cf5258240c321f'
 ]);
 
 export type UserGroup = {
