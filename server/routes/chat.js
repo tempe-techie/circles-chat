@@ -29,6 +29,11 @@ import {
   listReactionsForMessages,
   saveReaction,
 } from '../datastore/reactions.js';
+import {
+  createSession,
+  isValidSessionKey,
+  verifySession,
+} from '../datastore/sessions.js';
 import { recoverSignerAddress, verifyAuthorSignature } from '../utils/chain.js';
 import { buildReactionTransfer } from '../utils/reaction-payment.js';
 import { buildTipTransfer } from '../utils/tip-payment.js';
@@ -39,8 +44,35 @@ const DEFAULT_LIMIT = 10;
 const MAX_LIMIT = 50;
 const CHANNEL_NAME_PATTERN = /^#[a-z0-9-]+$/;
 
-function deleteSignPayload(messageKey) {
-  return `circles-chat:delete:${messageKey}`;
+const SESSION_SIGN_PREFIX = 'circles-chat:session:';
+
+function sessionSignPayload(sessionKey) {
+  return `${SESSION_SIGN_PREFIX}${sessionKey}`;
+}
+
+/**
+ * Validate the session key carried in a request body against the claimed
+ * author/actor address. Sends a 401 (with a SESSION_REQUIRED code so the
+ * client can prompt re-verification) and returns false when invalid.
+ */
+async function ensureValidSession(req, res, address) {
+  const { sessionKey } = req.body ?? {};
+  if (!isValidSessionKey(sessionKey)) {
+    res
+      .status(401)
+      .json({ error: 'Verification required', code: 'SESSION_REQUIRED' });
+    return false;
+  }
+
+  const ok = await verifySession(sessionKey, address);
+  if (!ok) {
+    res
+      .status(401)
+      .json({ error: 'Verification required', code: 'SESSION_REQUIRED' });
+    return false;
+  }
+
+  return true;
 }
 
 async function resolveMessageByKey(key) {
@@ -74,6 +106,54 @@ function authorFromMessageKey(key) {
 
 router.get('/moderators', (_req, res) => {
   return res.json({ moderators: getModeratorAddresses() });
+});
+
+router.post('/sessions', async (req, res) => {
+  try {
+    const { address, sessionKey, signature } = req.body ?? {};
+
+    if (!address || typeof address !== 'string' || !isAddress(address)) {
+      return res.status(400).json({ error: 'Invalid address' });
+    }
+
+    if (!isValidSessionKey(sessionKey)) {
+      return res.status(400).json({ error: 'Invalid session key' });
+    }
+
+    if (!signature || typeof signature !== 'string') {
+      return res.status(400).json({ error: 'signature is required' });
+    }
+
+    const userAddress = getAddress(address);
+    const signPayload = sessionSignPayload(sessionKey);
+
+    // The signature proves the wallet owner authorized this exact session key.
+    let signer = null;
+    try {
+      signer = getAddress(await recoverSignerAddress(signPayload, signature));
+    } catch {
+      // ERC-1271 smart-account signatures cannot be recovered to an EOA address.
+    }
+
+    let verified = signer === userAddress;
+    if (!verified) {
+      verified = await verifyAuthorSignature(userAddress, signPayload, signature);
+    }
+
+    if (!verified) {
+      return res
+        .status(401)
+        .json({ error: 'Signature does not match the address' });
+    }
+
+    await createSession({ userAddress, sessionKey });
+    return res.json({ ok: true });
+  } catch (err) {
+    console.error('Session create error:', err);
+    const message =
+      err instanceof Error ? err.message : 'Internal server error';
+    return res.status(500).json({ error: message });
+  }
 });
 
 router.get('/messages', async (req, res) => {
@@ -193,6 +273,10 @@ router.post('/messages', async (req, res) => {
       return res.status(400).json({ error: 'text is required' });
     }
 
+    if (!(await ensureValidSession(req, res, getAddress(author)))) {
+      return undefined;
+    }
+
     const ts =
       typeof timestamp === 'number'
         ? timestamp
@@ -283,14 +367,21 @@ router.post('/messages', async (req, res) => {
 router.delete('/messages/:key', async (req, res) => {
   try {
     const { key } = req.params;
-    const { signature } = req.body ?? {};
+    const { actor } = req.body ?? {};
 
     if (!key || typeof key !== 'string') {
       return res.status(400).json({ error: 'message key is required' });
     }
 
-    if (!signature || typeof signature !== 'string') {
-      return res.status(400).json({ error: 'signature is required' });
+    if (!actor || typeof actor !== 'string' || !isAddress(actor)) {
+      return res.status(400).json({ error: 'Invalid actor address' });
+    }
+
+    const actorAddress = getAddress(actor);
+
+    // The actor is authenticated via their session key (same system as posting).
+    if (!(await ensureValidSession(req, res, actorAddress))) {
+      return undefined;
     }
 
     const { message, kind } = await resolveMessageByKey(key);
@@ -304,29 +395,8 @@ router.delete('/messages/:key', async (req, res) => {
     }
 
     const author = getAddress(message.author);
-    const signPayload = deleteSignPayload(key);
-
-    let signer = null;
-    try {
-      signer = getAddress(await recoverSignerAddress(signPayload, signature));
-    } catch {
-      // ERC-1271 smart-account signatures cannot be recovered to an EOA address.
-    }
-
-    let isAuthor = signer === author;
-    if (!isAuthor) {
-      isAuthor = await verifyAuthorSignature(author, signPayload, signature);
-    }
-
-    let isMod = signer !== null && isModerator(signer);
-    if (!isMod) {
-      for (const modAddr of getModeratorAddresses()) {
-        if (await verifyAuthorSignature(modAddr, signPayload, signature)) {
-          isMod = true;
-          break;
-        }
-      }
-    }
+    const isAuthor = actorAddress === author;
+    const isMod = isModerator(actorAddress);
 
     if (!isAuthor && !isMod) {
       return res.status(403).json({ error: 'Not authorized to delete this message' });

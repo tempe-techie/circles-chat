@@ -11,9 +11,29 @@ Chat app for Circles users.
 
 ```bash
 npm install
-cp .env.example .env   # sets MYLOCALHOST=1 for local API env vars
+cp .env.example .env   # sets MYLOCALHOST=1 and SESSION_HMAC_SECRET for local API env vars
 gcloud auth application-default login   # Datastore access for project circles-chat-22
 ```
+
+> `SESSION_HMAC_SECRET` is required. It is used to HMAC-hash user session keys
+> before they are stored in the Datastore `UserSessions` collection (plaintext
+> session keys live only in the user's browser). In production, add a
+> `SESSION_HMAC_SECRET` entry to the Datastore `EnvVar` collection.
+
+### Verification & sessions
+
+Posting and deleting messages are gated by a lightweight session system:
+
+1. The first time a user posts or deletes, the app generates a random session
+   key in the browser and asks the wallet to sign it (`circles-chat:session:<key>`).
+2. The server verifies the signature against the user's address, then stores the
+   session under `UserSessions` keyed by `HMAC_SHA256(sessionKey)` with the
+   `userAddress` and a `timestamp`.
+3. The plaintext session key is kept only in the browser (`localStorage`) and is
+   sent with each post/delete. The server re-hashes it, looks up the entity, and
+   checks that the stored `userAddress` matches the address in the request.
+4. Sessions expire after 120 days; the client transparently re-verifies when the
+   server reports an expired/invalid session.
 
 Run the API server and Vite dev server (two terminals):
 

@@ -1,14 +1,36 @@
 import { getAddress } from 'viem';
-import { sendTransactions, signMessage } from '../host/bridge';
+import { sendTransactions } from '../host/bridge';
 import {
   buildMessageReaction,
   buildTip,
   deleteMessage,
   postMessage,
+  SessionRequiredError,
   type PostMessageTarget,
 } from './api';
-import { DELETE_SIGN_PREFIX } from './constants';
+import { ensureSession } from './session';
 import type { ChatChannel } from './types';
+
+/**
+ * Run an action that needs a valid session. The session is created on first use
+ * (prompting the user to sign), reused afterwards, and re-verified once if the
+ * server reports it as expired/invalid.
+ */
+async function withSession<T>(
+  wallet: string,
+  run: (sessionKey: string) => Promise<T>,
+): Promise<T> {
+  const sessionKey = await ensureSession(wallet);
+  try {
+    return await run(sessionKey);
+  } catch (err) {
+    if (err instanceof SessionRequiredError) {
+      const freshKey = await ensureSession(wallet, { forceReverify: true });
+      return run(freshKey);
+    }
+    throw err;
+  }
+}
 
 function toHexValue(value: string | bigint | undefined): string {
   if (value == null || value === '' || value === '0') return '0x0';
@@ -53,20 +75,27 @@ export async function postChannelMessage(
   text: string,
   channel: ChatChannel,
 ): Promise<void> {
-  await postMessage(author, text, targetFromChannel(channel));
+  await withSession(author, (sessionKey) =>
+    postMessage(author, text, sessionKey, targetFromChannel(channel)),
+  );
 }
 
 export async function postMainMessage(
   author: string,
   text: string,
 ): Promise<void> {
-  await postMessage(author, text);
+  await withSession(author, (sessionKey) =>
+    postMessage(author, text, sessionKey),
+  );
 }
 
-export async function deleteMainMessage(key: string): Promise<void> {
-  const signPayload = `${DELETE_SIGN_PREFIX}${key}`;
-  const { signature } = await signMessage(signPayload);
-  await deleteMessage(key, signature);
+export async function deleteMainMessage(
+  actor: string,
+  key: string,
+): Promise<void> {
+  await withSession(actor, (sessionKey) =>
+    deleteMessage(key, actor, sessionKey),
+  );
 }
 
 export async function reactToMessage(

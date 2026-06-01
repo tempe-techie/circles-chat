@@ -388,10 +388,11 @@ export function ChatWall({
   };
 
   const handleDelete = async (key: string) => {
+    if (!wallet) return;
     setDeletingKey(key);
     setError(null);
     try {
-      await deleteMainMessage(key);
+      await deleteMainMessage(wallet, key);
       setMessages((prev) => prev.filter((m) => m.key !== key));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete');

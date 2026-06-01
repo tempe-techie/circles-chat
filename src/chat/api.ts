@@ -20,6 +20,32 @@ export type PostMessageTarget =
   | { kind: 'group'; address: string; channelName: string }
   | { kind: 'profile'; address: string; name: string };
 
+/** Thrown when the server rejects a request because the session is missing or expired. */
+export class SessionRequiredError extends Error {
+  constructor(message = 'Verification required') {
+    super(message);
+    this.name = 'SessionRequiredError';
+  }
+}
+
+export async function registerSession(
+  address: string,
+  sessionKey: string,
+  signature: string,
+): Promise<void> {
+  const res = await fetch('/api/chat/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ address, sessionKey, signature }),
+  });
+
+  const data = (await res.json()) as { error?: string };
+
+  if (!res.ok) {
+    throw new Error(data.error ?? 'Failed to verify');
+  }
+}
+
 export async function fetchModerators(): Promise<string[]> {
   const res = await fetch('/api/chat/moderators');
   const data = (await res.json()) as { moderators?: string[]; error?: string };
@@ -69,6 +95,7 @@ export async function fetchMessages(
 export async function postMessage(
   author: string,
   text: string,
+  sessionKey: string,
   target?: PostMessageTarget,
 ): Promise<StoredMessage> {
   const trimmed = text.trim();
@@ -83,6 +110,7 @@ export async function postMessage(
     author,
     text: trimmed,
     timestamp: Math.floor(Date.now() / 1000),
+    sessionKey,
   };
 
   if (target?.kind === 'group') {
@@ -99,9 +127,15 @@ export async function postMessage(
     body: JSON.stringify(body),
   });
 
-  const data = (await res.json()) as StoredMessage & { error?: string };
+  const data = (await res.json()) as StoredMessage & {
+    error?: string;
+    code?: string;
+  };
 
   if (!res.ok) {
+    if (res.status === 401 && data.code === 'SESSION_REQUIRED') {
+      throw new SessionRequiredError(data.error);
+    }
     throw new Error(data.error ?? 'Failed to post message');
   }
 
@@ -110,17 +144,21 @@ export async function postMessage(
 
 export async function deleteMessage(
   key: string,
-  signature: string,
+  actor: string,
+  sessionKey: string,
 ): Promise<void> {
   const res = await fetch(`/api/chat/messages/${encodeURIComponent(key)}`, {
     method: 'DELETE',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ signature }),
+    body: JSON.stringify({ actor, sessionKey }),
   });
 
-  const data = (await res.json()) as { error?: string };
+  const data = (await res.json()) as { error?: string; code?: string };
 
   if (!res.ok) {
+    if (res.status === 401 && data.code === 'SESSION_REQUIRED') {
+      throw new SessionRequiredError(data.error);
+    }
     throw new Error(data.error ?? 'Failed to delete message');
   }
 }
