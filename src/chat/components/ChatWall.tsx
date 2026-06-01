@@ -461,7 +461,7 @@ export function ChatWall({
           <p className="mb-3 text-xs text-amber-400/90 bg-amber-950/30 rounded-lg px-3 py-2">
             Open in the{' '}
             <a
-              href="https://circles.gnosis.io/playground"
+              href="https://circles.gnosis.io/playground?url=https%3A%2F%2Fapp.circles-chat.org"
               target="_blank"
               rel="noreferrer"
               className="underline hover:text-amber-300"
